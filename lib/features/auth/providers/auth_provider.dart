@@ -64,8 +64,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final data = jsonDecode(response.body);
         final token = data['token'];
         final role = data['role'];
+        final userId = data['userId']?.toString() ?? '';
         
-        await ref.read(authRepositoryProvider).saveSession(token, role);
+        await ref.read(authRepositoryProvider).saveSession(token, role, userId: userId);
 
         // Set the global role provider so MainLayout switches dashboards
         ref.read(userRoleProvider.notifier).state =
