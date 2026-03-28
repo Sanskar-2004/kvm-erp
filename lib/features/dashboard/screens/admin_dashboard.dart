@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/dashboard_repository.dart';
 import '../../students/screens/students_screen.dart';
 import '../../fees/screens/fees_screen.dart';
-import '../../timetable/screens/timetable_screen.dart';
+import '../../timetable/screens/timetable_manager_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
 import 'admin_finance_screen.dart';
@@ -96,7 +96,7 @@ class AdminDashboard extends ConsumerWidget {
                     icon: Icons.schedule_rounded,
                     color: Colors.purple,
                     onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const TimetableScreen()))),
+                        MaterialPageRoute(builder: (_) => const TimetableManagerScreen()))),
                 _ActionCard(
                     title: 'Backup',
                     icon: Icons.backup_rounded,
