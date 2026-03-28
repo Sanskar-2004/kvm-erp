@@ -6,6 +6,7 @@ import '../../fees/screens/fees_screen.dart';
 import '../../timetable/screens/timetable_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
+import 'admin_finance_screen.dart';
 
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({Key? key}) : super(key: key);
@@ -108,6 +109,12 @@ class AdminDashboard extends ConsumerWidget {
                     color: Colors.orange,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const AdmissionScreen()))),
+                _ActionCard(
+                    title: 'Finance',
+                    icon: Icons.analytics_rounded,
+                    color: Colors.indigo,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const AdminFinanceScreen()))),
               ],
             ),
           ],
