@@ -79,7 +79,7 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
           ),
         ),
         scaffoldBackgroundColor: const Color(0xFFF8F9FC),
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: 0,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),

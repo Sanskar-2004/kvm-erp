@@ -7,6 +7,7 @@ import '../../../core/utils/academic_utils.dart';
 import '../../../core/utils/validator_service.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../students/repositories/student_repository.dart';
+import '../../../services/db/sqlite_service.dart';
 
 class MarksScreen extends ConsumerStatefulWidget {
   const MarksScreen({Key? key}) : super(key: key);
@@ -284,24 +285,22 @@ class _MarksScreenState extends ConsumerState<MarksScreen> {
 
         ValidatorService.validateMarks(marks, total);
 
-        // Push to sync engine
-        await ref.read(studentRepositoryProvider).db.then((db) => db.insert(
-          'marks',
-          {
-            'id': 'mark_${student.id}_${_selectedExamType}_${_selectedSubject}_${DateTime.now().millisecondsSinceEpoch}',
-            'student_id': student.id,
-            'date': DateTime.now().toIso8601String(),
-            'exam_type': _selectedExamType,
-            'subject': _selectedSubject,
-            'marks_obtained': marks,
-            'total_marks': total,
-            'device_id': 'device_01',
-            'is_synced': 0,
-            'is_deleted': 0,
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          },
-        ));
+        // Push to local SQLite
+        final db = await SQLiteService().database;
+        await db.insert('marks', {
+          'id': 'mark_${student.id}_${_selectedExamType}_${_selectedSubject}_${DateTime.now().millisecondsSinceEpoch}',
+          'student_id': student.id,
+          'date': DateTime.now().toIso8601String(),
+          'exam_type': _selectedExamType,
+          'subject': _selectedSubject,
+          'marks_obtained': marks,
+          'total_marks': total,
+          'device_id': 'device_01',
+          'is_synced': 0,
+          'is_deleted': 0,
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        });
       }
 
       if (mounted) {
