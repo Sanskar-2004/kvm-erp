@@ -7,7 +7,7 @@ import '../repositories/auth_repository.dart';
 
 // ── Role Enum ──────────────────────────────────────────────────────────
 
-enum UserRole { admin, teacher, parent, student }
+enum UserRole { admin, teacher, parent, student, accountant }
 
 final userRoleProvider = StateProvider<UserRole>((ref) => UserRole.admin);
 

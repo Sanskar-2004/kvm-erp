@@ -11,6 +11,10 @@ void main() async {
   final authRepo = AuthRepository();
   final session = await authRepo.getSession();
 
+  // DEBUGGING: Check console to verify session state on boot
+  debugPrint("BOOT - TOKEN: ${session?.token}");
+  debugPrint("BOOT - ROLE: ${session?.role}");
+
   runApp(
     ProviderScope(
       child: KVMErpApp(initialSession: session),
@@ -31,18 +35,22 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
   @override
   void initState() {
     super.initState();
-    // Set the role provider from cached session on startup
     if (widget.initialSession != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        final role = widget.initialSession!.role.toLowerCase();
         ref.read(userRoleProvider.notifier).state = UserRole.values
-            .firstWhere((e) => e.name == widget.initialSession!.role,
-                orElse: () => UserRole.student);
+            .firstWhere((e) => e.name == role, orElse: () => UserRole.student);
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Strict routing: no token or no role = always LoginScreen
+    final bool hasValidSession = widget.initialSession != null &&
+        widget.initialSession!.token.isNotEmpty &&
+        widget.initialSession!.role.isNotEmpty;
+
     return MaterialApp(
       title: 'KVM ERP',
       debugShowCheckedModeBanner: false,
@@ -50,10 +58,7 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
         useMaterial3: true,
       ),
-      home: widget.initialSession != null
-          ? const MainLayout()
-          : const LoginScreen(),
+      home: hasValidSession ? const MainLayout() : const LoginScreen(),
     );
   }
 }
-

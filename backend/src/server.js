@@ -5,6 +5,7 @@ const cors = require('cors');
 const authRoutes = require('./routes/authRoutes');
 const syncRoutes = require('./routes/syncRoutes');
 const studentRoutes = require('./routes/studentRoutes');
+const feeRoutes = require('./routes/feeRoutes');
 
 const app = express();
 app.use(cors());
@@ -18,6 +19,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/fees', feeRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

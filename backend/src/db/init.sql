@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin', 'teacher', 'student')),
+    role TEXT NOT NULL CHECK (role IN ('admin', 'teacher', 'student', 'parent', 'accountant')),
     device_id TEXT,
     is_synced BOOLEAN DEFAULT TRUE,
     is_deleted INTEGER DEFAULT 0,

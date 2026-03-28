@@ -4,6 +4,7 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../../features/dashboard/screens/admin_dashboard.dart';
 import '../../features/dashboard/screens/teacher_dashboard.dart';
 import '../../features/dashboard/screens/parent_dashboard.dart';
+import '../../features/dashboard/screens/accountant_dashboard.dart';
 import '../../features/students/screens/students_screen.dart';
 import '../../features/attendance/screens/attendance_screen.dart';
 import '../../features/fees/screens/fees_screen.dart';
@@ -78,6 +79,17 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         ];
         navItems = const [
           BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+        ];
+        break;
+
+      case UserRole.accountant:
+        screens = [
+          const AccountantDashboard(),
+          const FeesScreen(),
+        ];
+        navItems = const [
+          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
     }
