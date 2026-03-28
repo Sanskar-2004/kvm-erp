@@ -9,11 +9,18 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   final authRepo = AuthRepository();
-  final session = await authRepo.getSession();
+  var session = await authRepo.getSession();
 
   // DEBUGGING: Check console to verify session state on boot
   debugPrint("BOOT - TOKEN: ${session?.token}");
   debugPrint("BOOT - ROLE: ${session?.role}");
+
+  // Reject stale/mock tokens — real JWT tokens have 3 dot-separated parts
+  if (session != null && !session.token.contains('.')) {
+    debugPrint("BOOT - STALE TOKEN DETECTED! Clearing session...");
+    await authRepo.clearSession();
+    session = null;
+  }
 
   runApp(
     ProviderScope(

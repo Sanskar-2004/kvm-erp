@@ -12,6 +12,7 @@ import '../../features/sync/screens/conflict_logs_screen.dart';
 import '../../features/backup/screens/backup_screen.dart';
 import '../../features/timetable/screens/timetable_screen.dart';
 import '../../features/marks/screens/marks_screen.dart';
+import '../../features/auth/screens/login_screen.dart';
 import 'sync_status_badge.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
@@ -103,7 +104,23 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       appBar: AppBar(
         title: Text('KVM ERP • ${role.name.toUpperCase()}'),
         centerTitle: false,
-        actions: const [SyncStatusBadge()],
+        actions: [
+          const SyncStatusBadge(),
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            tooltip: 'Logout',
+            onPressed: () async {
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  (route) => false,
+                );
+              }
+            },
+          ),
+        ],
       ),
       body: IndexedStack(
         index: _currentIndex,
