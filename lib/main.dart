@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'core/widgets/main_layout.dart';
 import 'features/auth/repositories/auth_repository.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -11,7 +12,6 @@ void main() async {
   final authRepo = AuthRepository();
   var session = await authRepo.getSession();
 
-  // DEBUGGING: Check console to verify session state on boot
   debugPrint("BOOT - TOKEN: ${session?.token}");
   debugPrint("BOOT - ROLE: ${session?.role}");
 
@@ -53,7 +53,6 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
 
   @override
   Widget build(BuildContext context) {
-    // Strict routing: no token or no role = always LoginScreen
     final bool hasValidSession = widget.initialSession != null &&
         widget.initialSession!.token.isNotEmpty &&
         widget.initialSession!.role.isNotEmpty;
@@ -62,8 +61,35 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
       title: 'KVM ERP',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueAccent),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF4A6CF7),
+          brightness: Brightness.light,
+        ),
         useMaterial3: true,
+        textTheme: GoogleFonts.interTextTheme(),
+        appBarTheme: AppBarTheme(
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black87,
+          titleTextStyle: GoogleFonts.inter(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: Colors.black87,
+          ),
+        ),
+        scaffoldBackgroundColor: const Color(0xFFF8F9FC),
+        cardTheme: CardTheme(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: Colors.grey.withOpacity(0.1)),
+          ),
+        ),
+        bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+          backgroundColor: Colors.white,
+          elevation: 8,
+        ),
       ),
       home: hasValidSession ? const MainLayout() : const LoginScreen(),
     );

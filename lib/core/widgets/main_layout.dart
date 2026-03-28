@@ -68,18 +68,22 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       case UserRole.parent:
         screens = [
           const ParentDashboard(),
+          const FeesScreen(),
         ];
         navItems = const [
           BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
 
       case UserRole.student:
         screens = [
-          const ParentDashboard(), // Students see similar read-only view
+          const ParentDashboard(),
+          const FeesScreen(),
         ];
         navItems = const [
           BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
 
@@ -95,31 +99,115 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         break;
     }
 
-    // Clamp index if role changes and has fewer tabs
     if (_currentIndex >= screens.length) {
       _currentIndex = 0;
     }
 
+    // Role badge color
+    Color roleBadgeColor;
+    switch (role) {
+      case UserRole.admin:
+        roleBadgeColor = Colors.red;
+        break;
+      case UserRole.teacher:
+        roleBadgeColor = Colors.blue;
+        break;
+      case UserRole.accountant:
+        roleBadgeColor = Colors.teal;
+        break;
+      case UserRole.parent:
+        roleBadgeColor = Colors.green;
+        break;
+      case UserRole.student:
+        roleBadgeColor = Colors.purple;
+        break;
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('KVM ERP • ${role.name.toUpperCase()}'),
+        title: Row(
+          children: [
+            // App name
+            const Text(
+              'KVM ERP',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(width: 8),
+            // Role badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: roleBadgeColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                role.name.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: roleBadgeColor,
+                  letterSpacing: 1,
+                ),
+              ),
+            ),
+          ],
+        ),
         centerTitle: false,
+        elevation: 0,
         actions: [
           const SyncStatusBadge(),
-          IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Logout',
-            onPressed: () async {
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) {
-                Navigator.pushAndRemoveUntil(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  (route) => false,
-                );
+          // Profile / Logout menu
+          PopupMenuButton<String>(
+            icon: CircleAvatar(
+              radius: 16,
+              backgroundColor: roleBadgeColor.withOpacity(0.15),
+              child: Icon(Icons.person_rounded, size: 18, color: roleBadgeColor),
+            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            offset: const Offset(0, 45),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                enabled: false,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${role.name[0].toUpperCase()}${role.name.substring(1)} Account',
+                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                    ),
+                    Text(
+                      'Logged in as ${role.name}@kvm.edu',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout_rounded, size: 18, color: Colors.red[400]),
+                    const SizedBox(width: 8),
+                    Text('Logout', style: TextStyle(color: Colors.red[400])),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) async {
+              if (value == 'logout') {
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
               }
             },
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: IndexedStack(
@@ -127,12 +215,27 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         children: screens,
       ),
       bottomNavigationBar: navItems.length > 1
-          ? BottomNavigationBar(
-              currentIndex: _currentIndex,
-              onTap: (index) => setState(() => _currentIndex = index),
-              items: navItems,
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: Theme.of(context).colorScheme.primary,
+          ? Container(
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
+              ),
+              child: BottomNavigationBar(
+                currentIndex: _currentIndex,
+                onTap: (index) => setState(() => _currentIndex = index),
+                items: navItems,
+                type: BottomNavigationBarType.fixed,
+                selectedItemColor: roleBadgeColor,
+                unselectedItemColor: Colors.grey[400],
+                selectedFontSize: 12,
+                unselectedFontSize: 11,
+                elevation: 8,
+              ),
             )
           : null,
     );
