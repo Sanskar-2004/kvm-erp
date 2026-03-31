@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/widgets/main_layout.dart';
 import 'features/auth/repositories/auth_repository.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -8,6 +10,15 @@ import 'features/auth/screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize sqflite FFI for desktop platforms (Windows/Linux/macOS)
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
+       defaultTargetPlatform == TargetPlatform.linux ||
+       defaultTargetPlatform == TargetPlatform.macOS)) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   
   final authRepo = AuthRepository();
   var session = await authRepo.getSession();
