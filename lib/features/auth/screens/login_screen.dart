@@ -12,13 +12,13 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -28,7 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     final authNotifier = ref.read(authProvider.notifier);
     final success = await authNotifier.login(
-      _emailController.text.trim(),
+      _usernameController.text.trim(),
       _passwordController.text.trim(),
     );
 
@@ -76,17 +76,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                   const SizedBox(height: 48),
 
-                  // Email Field
+                  // Username Field
                   TextFormField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
+                    controller: _usernameController,
+                    keyboardType: TextInputType.text,
                     decoration: const InputDecoration(
-                      labelText: 'Email',
-                      prefixIcon: Icon(Icons.email_outlined),
+                      labelText: 'Username',
+                      prefixIcon: Icon(Icons.person_outlined),
                     ),
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Email is required';
+                        return 'Username is required';
                       }
                       return null;
                     },
@@ -114,9 +114,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     validator: (value) {
                       if (value == null || value.isEmpty) {
                         return 'Password is required';
-                      }
-                      if (value.length < 6) {
-                        return 'Password must be at least 6 characters';
                       }
                       return null;
                     },

@@ -8,11 +8,11 @@ const pool = new Pool({
 });
 
 const users = [
-  { name: 'Admin User',      email: 'admin@kvm.edu',      password: 'admin123',      role: 'admin' },
-  { name: 'Teacher User',    email: 'teacher@kvm.edu',    password: 'teacher123',    role: 'teacher' },
-  { name: 'Parent User',     email: 'parent@kvm.edu',     password: 'parent123',     role: 'parent' },
-  { name: 'Student User',    email: 'student@kvm.edu',    password: 'student123',    role: 'student' },
-  { name: 'Accountant User', email: 'accountant@kvm.edu', password: 'accountant123', role: 'accountant' },
+  { name: 'Admin User',      username: 'admin',      email: 'admin@kvm.edu',      password: 'admin',      role: 'admin' },
+  { name: 'Teacher User',    username: 'teacher',    email: 'teacher@kvm.edu',    password: 'teacher',    role: 'teacher' },
+  { name: 'Parent User',     username: 'parent',     email: 'parent@kvm.edu',     password: 'parent',     role: 'parent' },
+  { name: 'Student User',    username: 'student',    email: 'student@kvm.edu',    password: 'student',    role: 'student' },
+  { name: 'Accountant User', username: 'accountant', email: 'accountant@kvm.edu', password: 'accountant', role: 'accountant' },
 ];
 
 async function seed() {
@@ -22,10 +22,10 @@ async function seed() {
       await pool.query(
         `INSERT INTO users (name, email, password_hash, role, created_at, updated_at)
          VALUES ($1, $2, $3, $4, NOW(), NOW())
-         ON CONFLICT (email) DO NOTHING`,
+         ON CONFLICT (email) DO UPDATE SET password_hash = $3, updated_at = NOW()`,
         [u.name, u.email, hash, u.role]
       );
-      console.log(`✅ ${u.role.toUpperCase()} → ${u.email} / ${u.password}`);
+      console.log(`✅ ${u.role.toUpperCase()} → username: ${u.username} / password: ${u.password}`);
     } catch (e) {
       console.error(`❌ ${u.role}: ${e.message}`);
     }

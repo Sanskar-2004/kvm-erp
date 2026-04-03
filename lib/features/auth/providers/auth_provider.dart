@@ -47,7 +47,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   final Ref ref;
   AuthNotifier(this.ref) : super(const AuthState());
 
-  Future<bool> login(String email, String password) async {
+  Future<bool> login(String username, String password) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
@@ -55,7 +55,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         Uri.parse('$BASE_URL/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'email': email,
+          'email': username,
           'password': password,
         }),
       );
@@ -75,7 +75,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         final user = UserModel(
           id: 'remote_verified_user',
           name: 'Authorized Account',
-          email: email,
+          email: username,
           phone: '',
           role: role,
           createdAt: DateTime.now(),

@@ -176,7 +176,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                       style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
                     ),
                     Text(
-                      'Logged in as ${role.name}@kvm.edu',
+                      'Logged in as ${role.name}',
                       style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                     ),
                   ],
