@@ -22,8 +22,73 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   String _selectedClass = 'All';
   String _selectedGender = 'All';
   String _selectedCategory = 'All';
-  String _sortBy = 'Name'; // Name, Roll, Class
+  String _sortBy = 'Name';
   String _searchQuery = '';
+
+  // Extracted from actual data
+  List<String> _availableClasses = ['All'];
+  List<String> _availableGenders = ['All'];
+  List<String> _availableCategories = ['All'];
+
+  void _extractFilterOptions(List<StudentModel> students) {
+    final classSet = <String>{'All'};
+    final genderSet = <String>{'All'};
+    final categorySet = <String>{'All'};
+
+    for (final s in students) {
+      if (s.classId.isNotEmpty) classSet.add(s.classId);
+      if (s.gender.isNotEmpty) genderSet.add(s.gender);
+      if (s.category != null && s.category!.isNotEmpty) categorySet.add(s.category!);
+    }
+
+    _availableClasses = classSet.toList()..sort((a, b) {
+      if (a == 'All') return -1;
+      if (b == 'All') return 1;
+      // Try numeric sort
+      final aNum = int.tryParse(a);
+      final bNum = int.tryParse(b);
+      if (aNum != null && bNum != null) return aNum.compareTo(bNum);
+      return a.compareTo(b);
+    });
+    _availableGenders = genderSet.toList()..sort();
+    _availableCategories = categorySet.toList()..sort();
+  }
+
+  List<StudentModel> _applyFilters(List<StudentModel> students) {
+    var filtered = students.where((s) {
+      // Class filter
+      if (_selectedClass != 'All' && s.classId != _selectedClass) return false;
+      // Gender filter (case-insensitive)
+      if (_selectedGender != 'All' && s.gender.toLowerCase() != _selectedGender.toLowerCase()) return false;
+      // Category filter (case-insensitive)
+      if (_selectedCategory != 'All' && (s.category ?? '').toLowerCase() != _selectedCategory.toLowerCase()) return false;
+      // Search
+      if (_searchQuery.isNotEmpty) {
+        final q = _searchQuery;
+        return s.name.toLowerCase().contains(q) ||
+               s.rollNumber.toLowerCase().contains(q) ||
+               s.parentName.toLowerCase().contains(q) ||
+               s.classId.toLowerCase().contains(q);
+      }
+      return true;
+    }).toList();
+
+    // Sort
+    switch (_sortBy) {
+      case 'Name':
+        filtered.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      case 'Roll':
+        filtered.sort((a, b) => a.rollNumber.compareTo(b.rollNumber));
+      case 'Class':
+        filtered.sort((a, b) {
+          final aNum = int.tryParse(a.classId) ?? 999;
+          final bNum = int.tryParse(b.classId) ?? 999;
+          if (aNum != bNum) return aNum.compareTo(bNum);
+          return a.name.compareTo(b.name);
+        });
+    }
+    return filtered;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,12 +101,6 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text('All Students'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list_rounded),
-            onPressed: () => _showFilterSheet(),
-          ),
-        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
@@ -59,52 +118,112 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         backgroundColor: Colors.blue[700],
         foregroundColor: Colors.white,
       ),
-      body: Column(
-        children: [
-          // Search Bar
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: TextField(
-              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
-              decoration: InputDecoration(
-                hintText: 'Search by name, roll number...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.2)),
+      body: studentsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(child: Text('Error: $err')),
+        data: (allStudents) {
+          // Extract real filter options from data
+          _extractFilterOptions(allStudents);
+
+          // Validate selected filters still exist in data
+          if (!_availableClasses.contains(_selectedClass)) _selectedClass = 'All';
+          if (!_availableGenders.contains(_selectedGender)) _selectedGender = 'All';
+          if (!_availableCategories.contains(_selectedCategory)) _selectedCategory = 'All';
+
+          final filtered = _applyFilters(allStudents);
+
+          return Column(
+            children: [
+              // Search Bar
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: TextField(
+                  onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: 'Search by name, roll, class, parent...',
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.withOpacity(0.2)),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey.withOpacity(0.15)),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey.withOpacity(0.04),
+                  ),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.15)),
-                ),
-                filled: true,
-                fillColor: Colors.grey.withOpacity(0.04),
               ),
-            ),
-          ),
 
-          // Filter Chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            child: Row(
-              children: [
-                _buildFilterChip('Class: $_selectedClass', Colors.blue),
-                const SizedBox(width: 6),
-                _buildFilterChip('Gender: $_selectedGender', Colors.purple),
-                const SizedBox(width: 6),
-                _buildFilterChip('Sort: $_sortBy', Colors.orange),
-              ],
-            ),
-          ),
+              // Tappable Filter Chips
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                child: Row(
+                  children: [
+                    _buildTappableChip(
+                      label: 'Class: $_selectedClass',
+                      color: Colors.blue,
+                      isActive: _selectedClass != 'All',
+                      onTap: () => _showClassPicker(),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildTappableChip(
+                      label: 'Gender: $_selectedGender',
+                      color: Colors.purple,
+                      isActive: _selectedGender != 'All',
+                      onTap: () => _showGenderPicker(),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildTappableChip(
+                      label: 'Category: $_selectedCategory',
+                      color: Colors.teal,
+                      isActive: _selectedCategory != 'All',
+                      onTap: () => _showCategoryPicker(),
+                    ),
+                    const SizedBox(width: 6),
+                    _buildTappableChip(
+                      label: 'Sort: $_sortBy',
+                      color: Colors.orange,
+                      isActive: _sortBy != 'Name',
+                      onTap: () => _showSortPicker(),
+                    ),
+                    if (_selectedClass != 'All' || _selectedGender != 'All' || _selectedCategory != 'All') ...[
+                      const SizedBox(width: 6),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _selectedClass = 'All';
+                          _selectedGender = 'All';
+                          _selectedCategory = 'All';
+                          _sortBy = 'Name';
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.red.withOpacity(0.2)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.clear, size: 12, color: Colors.red),
+                              SizedBox(width: 4),
+                              Text('Clear', style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
 
-          // Student Count Banner
-          studentsAsync.when(
-            data: (students) {
-              final filtered = _applyFilters(students);
-              return Container(
+              // Count Banner
+              Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
@@ -115,259 +234,202 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                   children: [
                     Icon(Icons.groups_rounded, color: Colors.blue[700], size: 18),
                     const SizedBox(width: 8),
-                    Text('${filtered.length} Students',
+                    Text('Showing ${filtered.length} of ${allStudents.length} Students',
                         style: TextStyle(fontWeight: FontWeight.w600, color: Colors.blue[700], fontSize: 13)),
-                    const Spacer(),
-                    Text('Total: ${students.length}', style: TextStyle(color: Colors.grey[500], fontSize: 11)),
                   ],
                 ),
-              );
-            },
-            loading: () => const SizedBox.shrink(),
-            error: (_, __) => const SizedBox.shrink(),
-          ),
+              ),
 
-          // Student List
-          Expanded(
-            child: studentsAsync.when(
-              data: (students) {
-                final filtered = _applyFilters(students);
-                if (filtered.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search_off_rounded, size: 48, color: Colors.grey[300]),
-                        const SizedBox(height: 8),
-                        Text('No students found', style: TextStyle(color: Colors.grey[500])),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  itemCount: filtered.length,
-                  itemBuilder: (ctx, index) {
-                    final s = filtered[index];
-                    return _StudentCard(
-                      student: s,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => StudentDetailScreen(student: s)),
+              // Student List
+              Expanded(
+                child: filtered.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.search_off_rounded, size: 48, color: Colors.grey[300]),
+                            const SizedBox(height: 8),
+                            Text('No students match filters', style: TextStyle(color: Colors.grey[500])),
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _selectedClass = 'All';
+                                _selectedGender = 'All';
+                                _selectedCategory = 'All';
+                                _searchQuery = '';
+                              }),
+                              child: const Text('Clear all filters'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        itemCount: filtered.length,
+                        itemBuilder: (ctx, index) {
+                          final s = filtered[index];
+                          return _StudentCard(
+                            student: s,
+                            index: index,
+                            onTap: () async {
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => StudentDetailScreen(student: s)),
+                              );
+                            },
+                            onDelete: () => _confirmDelete(s),
+                          );
+                        },
                       ),
-                      onDelete: () async {
-                        final confirm = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Remove Student?'),
-                            content: Text('Are you sure you want to remove ${s.name}?'),
-                            actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(ctx, true),
-                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                                child: const Text('Remove', style: TextStyle(color: Colors.white)),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (confirm == true) {
-                          await ref.read(studentRepositoryProvider).deleteStudentSoft(s.id);
-                          ref.invalidate(studentsListProvider);
-                          ref.invalidate(dashboardMetricsProvider);
-                        }
-                      },
-                    );
-                  },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error: $err')),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  List<StudentModel> _applyFilters(List<StudentModel> students) {
-    var filtered = students.where((s) {
-      if (_selectedClass != 'All' && s.classId != _selectedClass) return false;
-      if (_selectedGender != 'All' && s.gender.toLowerCase() != _selectedGender.toLowerCase()) return false;
-      if (_selectedCategory != 'All' && (s.category ?? '').toLowerCase() != _selectedCategory.toLowerCase()) return false;
-      if (_searchQuery.isNotEmpty) {
-        return s.name.toLowerCase().contains(_searchQuery) ||
-               s.rollNumber.toLowerCase().contains(_searchQuery) ||
-               s.parentName.toLowerCase().contains(_searchQuery);
-      }
-      return true;
-    }).toList();
-
-    switch (_sortBy) {
-      case 'Name':
-        filtered.sort((a, b) => a.name.compareTo(b.name));
-      case 'Roll':
-        filtered.sort((a, b) => a.rollNumber.compareTo(b.rollNumber));
-      case 'Class':
-        filtered.sort((a, b) => a.classId.compareTo(b.classId));
-    }
-    return filtered;
-  }
-
-  Widget _buildFilterChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
-      ),
-      child: Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
-    );
-  }
-
-  void _showFilterSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Text('Filter & Sort', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                  const Spacer(),
-                  TextButton(
-                    onPressed: () {
-                      setSheetState(() {
-                        _selectedClass = 'All';
-                        _selectedGender = 'All';
-                        _selectedCategory = 'All';
-                        _sortBy = 'Name';
-                      });
-                      setState(() {});
-                    },
-                    child: const Text('Reset'),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              const Text('Class', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: ['All', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map((c) {
-                  final isSelected = _selectedClass == c;
-                  return ChoiceChip(
-                    label: Text(c == 'All' ? 'All' : 'Class $c', style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : null)),
-                    selected: isSelected,
-                    selectedColor: Colors.blue[700],
-                    onSelected: (_) {
-                      setSheetState(() => _selectedClass = c);
-                      setState(() {});
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-
-              const Text('Gender', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: ['All', 'Male', 'Female', 'Other'].map((g) {
-                  final isSelected = _selectedGender == g;
-                  return ChoiceChip(
-                    label: Text(g, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : null)),
-                    selected: isSelected,
-                    selectedColor: Colors.purple,
-                    onSelected: (_) {
-                      setSheetState(() => _selectedGender = g);
-                      setState(() {});
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-
-              const Text('Category', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: ['All', 'General', 'OBC', 'SC', 'ST', 'EWS'].map((c) {
-                  final isSelected = _selectedCategory == c;
-                  return ChoiceChip(
-                    label: Text(c, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : null)),
-                    selected: isSelected,
-                    selectedColor: Colors.teal,
-                    onSelected: (_) {
-                      setSheetState(() => _selectedCategory = c);
-                      setState(() {});
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 12),
-
-              const Text('Sort By', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                children: ['Name', 'Roll', 'Class'].map((s) {
-                  final isSelected = _sortBy == s;
-                  return ChoiceChip(
-                    label: Text(s, style: TextStyle(fontSize: 11, color: isSelected ? Colors.white : null)),
-                    selected: isSelected,
-                    selectedColor: Colors.orange,
-                    onSelected: (_) {
-                      setSheetState(() => _sortBy = s);
-                      setState(() {});
-                    },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(ctx),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[700],
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Apply'),
-                ),
               ),
             ],
-          ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Tappable filter chip ──
+  Widget _buildTappableChip({
+    required String label,
+    required Color color,
+    required bool isActive,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? color.withOpacity(0.15) : color.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isActive ? color : color.withOpacity(0.15), width: isActive ? 1.5 : 1),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+            const SizedBox(width: 4),
+            Icon(Icons.arrow_drop_down, size: 16, color: color),
+          ],
         ),
       ),
     );
   }
+
+  // ── Quick pickers (popup menus) ──
+  void _showClassPicker() {
+    _showPickerSheet('Select Class', _availableClasses, _selectedClass, (v) {
+      setState(() => _selectedClass = v);
+    });
+  }
+
+  void _showGenderPicker() {
+    _showPickerSheet('Select Gender', _availableGenders, _selectedGender, (v) {
+      setState(() => _selectedGender = v);
+    });
+  }
+
+  void _showCategoryPicker() {
+    _showPickerSheet('Select Category', _availableCategories, _selectedCategory, (v) {
+      setState(() => _selectedCategory = v);
+    });
+  }
+
+  void _showSortPicker() {
+    _showPickerSheet('Sort By', ['Name', 'Roll', 'Class'], _sortBy, (v) {
+      setState(() => _sortBy = v);
+    });
+  }
+
+  void _showPickerSheet(String title, List<String> options, String current, void Function(String) onSelect) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: options.map((opt) {
+                final isSelected = current == opt;
+                return GestureDetector(
+                  onTap: () {
+                    onSelect(opt);
+                    Navigator.pop(ctx);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isSelected ? Colors.blue[700] : Colors.grey.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: isSelected ? Colors.blue[700]! : Colors.grey.withOpacity(0.2),
+                      ),
+                    ),
+                    child: Text(
+                      opt,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected ? Colors.white : Colors.black87,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _confirmDelete(StudentModel s) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Student?'),
+        content: Text('Are you sure you want to remove ${s.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await ref.read(studentRepositoryProvider).deleteStudentSoft(s.id);
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+    }
+  }
 }
 
-// ── Student Card Widget ──
+// ── Student Card ──
 class _StudentCard extends StatelessWidget {
   final StudentModel student;
+  final int index;
   final VoidCallback onTap;
   final VoidCallback onDelete;
 
-  const _StudentCard({required this.student, required this.onTap, required this.onDelete});
+  const _StudentCard({required this.student, required this.index, required this.onTap, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
-    final genderIcon = student.gender.toLowerCase() == 'male' ? Icons.male : Icons.female;
-    final genderColor = student.gender.toLowerCase() == 'male' ? Colors.blue : Colors.pink;
+    final isMale = student.gender.toLowerCase() == 'male';
+    final genderColor = isMale ? Colors.blue : student.gender.toLowerCase() == 'female' ? Colors.pink : Colors.grey;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
@@ -376,44 +438,74 @@ class _StudentCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
-      child: ListTile(
+      child: InkWell(
         onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-        leading: CircleAvatar(
-          backgroundColor: genderColor.withOpacity(0.1),
-          child: Text(student.name[0].toUpperCase(),
-              style: TextStyle(fontWeight: FontWeight.bold, color: genderColor)),
-        ),
-        title: Row(
-          children: [
-            Flexible(
-              child: Text(student.name,
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                  overflow: TextOverflow.ellipsis),
-            ),
-            const SizedBox(width: 6),
-            Icon(genderIcon, size: 14, color: genderColor),
-          ],
-        ),
-        subtitle: Text(
-          'Roll: ${student.rollNumber} • Class ${student.classId} • Age ${student.age}',
-          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-        ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (student.category != null && student.category!.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              // Avatar
+              CircleAvatar(
+                radius: 20,
+                backgroundColor: genderColor.withOpacity(0.1),
+                child: Text(
+                  student.name.isNotEmpty ? student.name[0].toUpperCase() : '?',
+                  style: TextStyle(fontWeight: FontWeight.bold, color: genderColor, fontSize: 16),
                 ),
-                child: Text(student.category!, style: const TextStyle(fontSize: 9, color: Colors.teal)),
               ),
-            const SizedBox(width: 4),
-            const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
-          ],
+              const SizedBox(width: 12),
+
+              // Details
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(student.name,
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          isMale ? Icons.male : student.gender.toLowerCase() == 'female' ? Icons.female : Icons.person,
+                          size: 14, color: genderColor,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Roll: ${student.rollNumber} • Class ${student.classId} • Age ${student.age}',
+                      style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+                    ),
+                    if (student.parentName.isNotEmpty && student.parentName != 'Pending')
+                      Text('Parent: ${student.parentName}',
+                          style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                  ],
+                ),
+              ),
+
+              // Badges + Arrow
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (student.category != null && student.category!.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 4),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(student.category!, style: const TextStyle(fontSize: 9, color: Colors.teal, fontWeight: FontWeight.w600)),
+                    ),
+                  const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
