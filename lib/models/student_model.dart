@@ -7,10 +7,24 @@ class StudentModel {
   final String phone;
   final String parentName;
   final String parentPhone;
+  final String? parentOccupation;
+  final String? motherName;
+  final String? motherPhone;
   final String? profileImageUrl;
   final DateTime dateOfBirth;
   final String gender;
+  final String? caste;
+  final String? category; // General, OBC, SC, ST, EWS
+  final String? religion;
+  final String? nationality;
+  final String? bloodGroup;
   final String address;
+  final String? city;
+  final String? state;
+  final String? pincode;
+  final String? previousSchool;
+  final String? previousClass;
+  final String? aadharNumber;
   final DateTime admissionDate;
   final String status; // pending | approved | rejected
   final DateTime updatedAt;
@@ -27,10 +41,24 @@ class StudentModel {
     required this.phone,
     required this.parentName,
     required this.parentPhone,
+    this.parentOccupation,
+    this.motherName,
+    this.motherPhone,
     this.profileImageUrl,
     required this.dateOfBirth,
     required this.gender,
+    this.caste,
+    this.category,
+    this.religion,
+    this.nationality,
+    this.bloodGroup,
     required this.address,
+    this.city,
+    this.state,
+    this.pincode,
+    this.previousSchool,
+    this.previousClass,
+    this.aadharNumber,
     required this.admissionDate,
     this.status = 'approved',
     DateTime? updatedAt,
@@ -49,14 +77,28 @@ class StudentModel {
       phone: json['phone'] as String,
       parentName: json['parent_name'] as String,
       parentPhone: json['parent_phone'] as String,
+      parentOccupation: json['parent_occupation'] as String?,
+      motherName: json['mother_name'] as String?,
+      motherPhone: json['mother_phone'] as String?,
       profileImageUrl: json['profile_image_url'] as String?,
       dateOfBirth: DateTime.parse(json['date_of_birth'] as String),
       gender: json['gender'] as String,
+      caste: json['caste'] as String?,
+      category: json['category'] as String?,
+      religion: json['religion'] as String?,
+      nationality: json['nationality'] as String?,
+      bloodGroup: json['blood_group'] as String?,
       address: json['address'] as String,
+      city: json['city'] as String?,
+      state: json['state'] as String?,
+      pincode: json['pincode'] as String?,
+      previousSchool: json['previous_school'] as String?,
+      previousClass: json['previous_class'] as String?,
+      aadharNumber: json['aadhar_number'] as String?,
       admissionDate: DateTime.parse(json['admission_date'] as String),
       status: json['status'] as String? ?? 'approved',
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
           : DateTime.now(),
       deviceId: json['device_id'] as String? ?? 'unknown',
       isSynced: (json['is_synced'] as int?) == 1,
@@ -74,10 +116,24 @@ class StudentModel {
       'phone': phone,
       'parent_name': parentName,
       'parent_phone': parentPhone,
+      'parent_occupation': parentOccupation,
+      'mother_name': motherName,
+      'mother_phone': motherPhone,
       'profile_image_url': profileImageUrl,
       'date_of_birth': dateOfBirth.toIso8601String(),
       'gender': gender,
+      'caste': caste,
+      'category': category,
+      'religion': religion,
+      'nationality': nationality,
+      'blood_group': bloodGroup,
       'address': address,
+      'city': city,
+      'state': state,
+      'pincode': pincode,
+      'previous_school': previousSchool,
+      'previous_class': previousClass,
+      'aadhar_number': aadharNumber,
       'admission_date': admissionDate.toIso8601String(),
       'status': status,
       'updated_at': updatedAt.toIso8601String(),
@@ -86,5 +142,11 @@ class StudentModel {
       'is_deleted': isDeleted ? 1 : 0,
     };
   }
-}
 
+  int get age {
+    final now = DateTime.now();
+    int age = now.year - dateOfBirth.year;
+    if (now.month < dateOfBirth.month || (now.month == dateOfBirth.month && now.day < dateOfBirth.day)) age--;
+    return age;
+  }
+}

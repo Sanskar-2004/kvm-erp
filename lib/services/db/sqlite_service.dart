@@ -89,11 +89,26 @@ class SQLiteService {
         phone TEXT NOT NULL,
         parent_name TEXT NOT NULL,
         parent_phone TEXT NOT NULL,
+        parent_occupation TEXT,
+        mother_name TEXT,
+        mother_phone TEXT,
         profile_image_url TEXT,
         date_of_birth TEXT NOT NULL,
         gender TEXT NOT NULL,
+        caste TEXT,
+        category TEXT,
+        religion TEXT,
+        nationality TEXT,
+        blood_group TEXT,
         address TEXT NOT NULL,
+        city TEXT,
+        state TEXT,
+        pincode TEXT,
+        previous_school TEXT,
+        previous_class TEXT,
+        aadhar_number TEXT,
         admission_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'approved',
         updated_at TEXT NOT NULL,
         device_id TEXT NOT NULL,
         is_synced INTEGER NOT NULL DEFAULT 0,
@@ -240,7 +255,21 @@ class SQLiteService {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle future migrations here
+    if (oldVersion < 2) {
+      // Add new student columns
+      final newCols = [
+        'parent_occupation TEXT', 'mother_name TEXT', 'mother_phone TEXT',
+        'caste TEXT', 'category TEXT', 'religion TEXT', 'nationality TEXT',
+        'blood_group TEXT', 'city TEXT', 'state TEXT', 'pincode TEXT',
+        'previous_school TEXT', 'previous_class TEXT', 'aadhar_number TEXT',
+        'status TEXT DEFAULT \'approved\'',
+      ];
+      for (final col in newCols) {
+        try {
+          await db.execute('ALTER TABLE students ADD COLUMN $col');
+        } catch (_) {} // Column may already exist
+      }
+    }
   }
 
   // ── Generic CRUD Helpers ─────────────────────────────────────────────
