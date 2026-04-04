@@ -16,12 +16,29 @@ exports.syncPush = async (req, res) => {
             if (!ALLOWED_TABLES.includes(tableName)) continue;
             if (!Array.isArray(records) || records.length === 0) continue;
 
+            let validColumns = [];
+            try {
+                const colResult = await db.query(`SELECT column_name FROM information_schema.columns WHERE table_name = $1`, [tableName]);
+                validColumns = colResult.rows.map(r => r.column_name);
+            } catch (e) {
+                continue; // Database failure fetching columns
+            }
+            if (validColumns.length === 0) continue; // Table doesn't exist remotely
+
             let successfulUpserts = 0;
             let errors = [];
 
-            for (const record of records) {
+            for (const rawRecord of records) {
                 try {
+                    // Pre-filter: Explicitly strip payload keeping only columns known exactly natively to Postgres
+                    const record = {};
+                    Object.keys(rawRecord).forEach(k => {
+                        if (validColumns.includes(k)) record[k] = rawRecord[k];
+                    });
+
                     const columns = Object.keys(record);
+                    if (columns.length === 0) throw new Error("No matching columns");
+                    
                     const values = Object.values(record);
                     
                     // Parameters: $1, $2, $3...
