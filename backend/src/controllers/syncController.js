@@ -36,6 +36,14 @@ exports.syncPush = async (req, res) => {
                         if (validColumns.includes(k)) record[k] = rawRecord[k];
                     });
 
+                    // Server-side strict constraint enforcement (Flutter typically omits created_at from sync queues)
+                    if (validColumns.includes('created_at') && !record['created_at']) {
+                        record['created_at'] = new Date().toISOString();
+                    }
+                    if (validColumns.includes('updated_at') && !record['updated_at']) {
+                        record['updated_at'] = new Date().toISOString();
+                    }
+
                     const columns = Object.keys(record);
                     if (columns.length === 0) throw new Error("No matching columns");
                     
@@ -62,7 +70,7 @@ exports.syncPush = async (req, res) => {
                     await db.query(query, values);
                     successfulUpserts++;
                 } catch (e) {
-                    errors.push({ recordId: record.id, error: e.message });
+                    errors.push({ recordId: rawRecord.id, error: e.message });
                 }
             }
 
