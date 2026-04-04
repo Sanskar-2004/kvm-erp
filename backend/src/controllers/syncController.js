@@ -75,16 +75,23 @@ exports.syncPull = async (req, res) => {
         
         // Loop purely through mapped specific tables dynamically dumping data
         for (const table of ALLOWED_TABLES) {
-            // Note: date logic assumes lastSync string parses correctly depending on SQLite precision
-            const result = await db.query(
-                `SELECT * FROM "${table}" WHERE updated_at > $1`, 
-                [lastSync]
-            );
-            
-            if (result.rows.length > 0) {
-                pullPayload[table] = result.rows;
-            } else {
-                pullPayload[table] = [];
+            try {
+                // Try pulling with updated_at delta
+                const result = await db.query(
+                    `SELECT * FROM "${table}" WHERE updated_at > $1`, 
+                    [lastSync]
+                );
+                pullPayload[table] = result.rows.length > 0 ? result.rows : [];
+            } catch (err) {
+                // Fallback for tables missing updated_at or missing table entirely 
+                // e.g. parent_student_map, alerts, classes which might not have updated_at
+                try {
+                    const fallbackResult = await db.query(`SELECT * FROM "${table}"`);
+                    pullPayload[table] = fallbackResult.rows.length > 0 ? fallbackResult.rows : [];
+                } catch (fallbackErr) {
+                    // If table doesn't exist at all, ignore it safely rather than crashing the whole pull sync
+                    pullPayload[table] = [];
+                }
             }
         }
         
