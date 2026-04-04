@@ -87,10 +87,24 @@ class SyncService {
 
     // 1. Build exactly the { "students": [], "attendance": [] } structure locally
     Map<String, List<Map<String, dynamic>>> payload = {};
+    List<int> corruptedJobIds = [];
+
     for (var job in queue) {
       final table = job['table_name'].toString();
       if (!payload.containsKey(table)) payload[table] = [];
-      payload[table]!.add(jsonDecode(job['data'].toString()));
+      try {
+        payload[table]!.add(jsonDecode(job['data'].toString()));
+      } catch (e) {
+        log('Corrupt sync job ignored: ${job['id']}');
+        corruptedJobIds.add(int.parse(job['id'].toString()));
+      }
+    }
+
+    if (corruptedJobIds.isNotEmpty) {
+      for (final id in corruptedJobIds) {
+        await db.delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+      }
+      if (payload.values.every((list) => list.isEmpty)) return;
     }
 
     try {
@@ -129,6 +143,7 @@ class SyncService {
           whereArgs: [job['id']]
         );
       }
+      throw Exception('Background Push failed to upload. Check logs.');
     }
   }
 
@@ -152,20 +167,61 @@ class SyncService {
              for (final table in serverDataMap.keys) {
                 if (table == 'serverTime') continue;
 
+                // Fetch SQLite valid columns to prevent crash when backend pushes new schema fields (e.g. password_hash)
+                final tableInfo = await txn.rawQuery('PRAGMA table_info("$table")');
+                if (tableInfo.isEmpty) continue; // Table doesn't exist locally, skip safely
+                
+                final validColumns = tableInfo.map((e) => e['name'].toString()).toSet();
+                
+                // Track NOT NULL columns that do not have a default constraint
+                final notNullColumns = tableInfo.where((e) => e['notnull'] == 1 && e['dflt_value'] == null).map((e) => {
+                  'name': e['name'].toString(), 
+                  'type': e['type'].toString().toUpperCase()
+                }).toList();
+
                 final List<dynamic> rows = serverDataMap[table];
-                for (final row in rows) {
+                for (final rawRow in rows) {
+                   final row = Map<String, dynamic>.from(rawRow);
+                   row.removeWhere((key, value) => !validColumns.contains(key)); // Strip unknown columns
+                   
+                   // Defend against missing cloud properties crashing strict native NOT NULL SQLite rules 
+                   for (final colConfig in notNullColumns) {
+                      final colName = colConfig['name']!;
+                      if (row[colName] == null) {
+                         if (colConfig['type']!.contains('INT')) {
+                            row[colName] = 0;
+                         } else if (colConfig['type']!.contains('REAL') || colConfig['type']!.contains('FLOAT') || colConfig['type']!.contains('DOUBLE')) {
+                            row[colName] = 0.0;
+                         } else {
+                            row[colName] = '';
+                         }
+                      }
+                   }
+
+                   // Coerce id to string natively if server implicitly serves numeric integers
+                   if (row.containsKey('id') && row['id'] != null) {
+                       row['id'] = row['id'].toString();
+                   }
+                   
+                   // SQFlite absolutely rejects Dart `bool` types (true/false) because SQLite only has integers (1/0)
+                   // The postgres server naturally sends True/False JSON primitives natively
+                   row.updateAll((key, value) {
+                      if (value is bool) return value ? 1 : 0;
+                      return value;
+                   });
+                   
                    // Ensure local database structurally mirrors changes correctly dropping older local rows
                    final localResults = await txn.query(table, where: 'id = ?', whereArgs: [row['id']]);
                    if (localResults.isEmpty) {
                       if (row['is_deleted'] != 1) { // Drop dead cloud references
-                         await txn.insert(table, Map<String, dynamic>.from(row));
+                         await txn.insert(table, row);
                       }
                    } else {
                       final localUpdatedAt = DateTime.parse(localResults.first['updated_at'].toString());
                       final serverUpdatedAt = DateTime.parse(row['updated_at'].toString());
                       
                       if (serverUpdatedAt.isAfter(localUpdatedAt)) {
-                         await txn.update(table, Map<String, dynamic>.from(row), where: 'id = ?', whereArgs: [row['id']]);
+                         await txn.update(table, row, where: 'id = ?', whereArgs: [row['id']]);
                       }
                    }
                 }

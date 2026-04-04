@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../repositories/attendance_repository.dart';
 import '../../../models/attendance_model.dart';
 import '../../students/repositories/student_repository.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../auth/repositories/auth_repository.dart';
 
 class AttendanceScreen extends ConsumerStatefulWidget {
   const AttendanceScreen({Key? key}) : super(key: key);
@@ -15,8 +19,12 @@ class AttendanceScreen extends ConsumerStatefulWidget {
 class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   DateTime _selectedDate = DateTime.now();
   int _periodNumber = 1;
-  String _selectedClass = 'All';
-  
+  String _selectedClass = '';
+
+  // Teacher's assigned classes from timetable
+  List<String> _assignedClasses = [];
+  bool _isLoadingClasses = true;
+
   // null = not marked, true = present, false = absent
   final Map<String, bool?> _attendanceState = {};
   bool _isSaving = false;
@@ -25,18 +33,71 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
   int get _presentCount => _attendanceState.values.where((v) => v == true).length;
   int get _absentCount => _attendanceState.values.where((v) => v == false).length;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadAssignedClasses();
+  }
+
+  Future<void> _loadAssignedClasses() async {
+    final session = await ref.read(authRepositoryProvider).getSession();
+    if (session == null || session.userId.isEmpty) {
+      // Fallback: show all classes if no userId
+      setState(() {
+        _assignedClasses = [];
+        _isLoadingClasses = false;
+      });
+      return;
+    }
+
+    try {
+      final response = await http.get(
+        Uri.parse('$BASE_URL/timetable/teacher/${session.userId}'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final timetable = List<Map<String, dynamic>>.from(data['timetable'] ?? []);
+
+        // Extract unique class IDs from timetable
+        final classSet = <String>{};
+        for (final entry in timetable) {
+          final classId = entry['class_id']?.toString();
+          if (classId != null && classId.isNotEmpty) classSet.add(classId);
+        }
+
+        final sorted = classSet.toList()
+          ..sort((a, b) {
+            final aNum = int.tryParse(a);
+            final bNum = int.tryParse(b);
+            if (aNum != null && bNum != null) return aNum.compareTo(bNum);
+            return a.compareTo(b);
+          });
+
+        setState(() {
+          _assignedClasses = sorted;
+          if (sorted.isNotEmpty) _selectedClass = sorted.first;
+          _isLoadingClasses = false;
+        });
+      } else {
+        setState(() => _isLoadingClasses = false);
+      }
+    } catch (e) {
+      debugPrint('Load assigned classes error: $e');
+      setState(() => _isLoadingClasses = false);
+    }
+  }
+
   void _submitBulkAttendance(List<dynamic> students) async {
-    // Validate all students are marked
     final unmarked = students.where((s) => _attendanceState[s.id] == null).length;
     if (unmarked > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('$unmarked students not marked! Tap each student to mark.'),
-          backgroundColor: Colors.orange[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$unmarked students not marked! Tap P or A for each student.'),
+        backgroundColor: Colors.orange[700],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
       return;
     }
 
@@ -57,18 +118,16 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
       ref.invalidate(dashboardMetricsProvider);
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(children: [
-              const Icon(Icons.check_circle, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
-              Text('Saved! $_presentCount present, $_absentCount absent'),
-            ]),
-            backgroundColor: Colors.green[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text('Saved! $_presentCount present, $_absentCount absent'),
+          ]),
+          backgroundColor: Colors.green[700],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ));
       }
     } catch (e) {
       if (mounted) {
@@ -93,250 +152,249 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final studentsAsync = ref.watch(studentRepositoryProvider).getAllStudents();
+    final studentsAsync = ref.watch(studentRepositoryProvider).getAllStudents(limit: 500, offset: 0);
 
     return Scaffold(
+      appBar: AppBar(
+        leading: Navigator.canPop(context)
+            ? IconButton(icon: const Icon(Icons.arrow_back_rounded), onPressed: () => Navigator.pop(context))
+            : null,
+        title: const Text('Mark Attendance'),
+      ),
       floatingActionButton: _isSaving
           ? const CircularProgressIndicator()
           : FloatingActionButton.extended(
+              heroTag: null,
               onPressed: () async {
-                final students = await studentsAsync;
+                final allStudents = await studentsAsync;
+                final students = _selectedClass.isEmpty
+                    ? allStudents
+                    : allStudents.where((s) => s.classId == _selectedClass).toList();
                 _submitBulkAttendance(students);
               },
               icon: const Icon(Icons.save_rounded),
               label: Text('Save ($_markedCount)'),
               backgroundColor: _markedCount > 0 ? Colors.green : Colors.grey,
             ),
-      body: FutureBuilder(
-        future: studentsAsync,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
-
-          final allStudents = snapshot.data ?? [];
-          if (allStudents.isEmpty) {
-            return const Center(child: Text('Add students first to mark attendance.'));
-          }
-
-          // Extract classes
-          final classSet = <String>{'All'};
-          for (final s in allStudents) {
-            classSet.add(s.classId);
-          }
-          final classes = classSet.toList()..sort();
-
-          // Filter
-          final students = _selectedClass == 'All'
-              ? allStudents
-              : allStudents.where((s) => s.classId == _selectedClass).toList();
-
-          return Column(
-            children: [
-              // Controls Bar
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.04),
-                  border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.1))),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        // Date picker
-                        Expanded(
-                          child: InkWell(
-                            onTap: _pickDate,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
-                                    style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Period selector
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<int>(
-                              value: _periodNumber,
-                              items: List.generate(8, (i) => DropdownMenuItem(
-                                value: i + 1,
-                                child: Text('P${i + 1}', style: const TextStyle(fontSize: 13)),
-                              )),
-                              onChanged: (v) => setState(() => _periodNumber = v ?? 1),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-
-                        // Class filter
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.grey.withOpacity(0.2)),
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              value: _selectedClass,
-                              items: classes.map((c) => DropdownMenuItem(
-                                value: c,
-                                child: Text(c == 'All' ? 'All' : 'C$c', style: const TextStyle(fontSize: 13)),
-                              )).toList(),
-                              onChanged: (v) => setState(() => _selectedClass = v ?? 'All'),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-
-                    // Stats bar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _statChip('Total', '${students.length}', Colors.blue),
-                        _statChip('Present', '$_presentCount', Colors.green),
-                        _statChip('Absent', '$_absentCount', Colors.red),
-                        _statChip('Unmarked', '${students.length - _markedCount}', Colors.grey),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              // Student List — NEUTRAL TOGGLES (no default)
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                  itemCount: students.length,
-                  itemBuilder: (ctx, i) {
-                    final student = students[i];
-                    final state = _attendanceState[student.id]; // null = unmarked
-
-                    Color bgColor;
-                    if (state == true) {
-                      bgColor = Colors.green.withOpacity(0.06);
-                    } else if (state == false) {
-                      bgColor = Colors.red.withOpacity(0.06);
-                    } else {
-                      bgColor = Colors.transparent;
+      body: _isLoadingClasses
+          ? const Center(child: CircularProgressIndicator())
+          : _assignedClasses.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.event_busy_rounded, size: 56, color: Colors.grey[300]),
+                      const SizedBox(height: 12),
+                      Text('No classes assigned', style: TextStyle(color: Colors.grey[500], fontSize: 16)),
+                      const SizedBox(height: 8),
+                      Text('Ask admin to assign you in the timetable', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                    ],
+                  ),
+                )
+              : FutureBuilder(
+                  future: studentsAsync,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
                     }
+                    if (snapshot.hasError) return Center(child: Text('Error: ${snapshot.error}'));
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 4),
-                      decoration: BoxDecoration(
-                        color: bgColor,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: state == null ? Colors.grey.withOpacity(0.15) :
-                                 state == true ? Colors.green.withOpacity(0.2) :
-                                 Colors.red.withOpacity(0.2),
-                        ),
-                      ),
-                      child: ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          radius: 16,
-                          backgroundColor: state == null ? Colors.grey.withOpacity(0.1) :
-                                          state == true ? Colors.green.withOpacity(0.1) :
-                                          Colors.red.withOpacity(0.1),
-                          child: Text(
-                            '${i + 1}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: state == null ? Colors.grey : state == true ? Colors.green : Colors.red,
-                            ),
+                    final allStudents = snapshot.data ?? [];
+                    // Filter to only assigned class
+                    final students = allStudents.where((s) => s.classId == _selectedClass).toList();
+
+                    return Column(
+                      children: [
+                        // Controls Bar
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(0.04),
+                            border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.1))),
                           ),
-                        ),
-                        title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                        subtitle: Text('Roll: ${student.rollNumber} • Class ${student.classId}',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Present button
-                            InkWell(
-                              onTap: () => setState(() => _attendanceState[student.id] = true),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: state == true ? Colors.green : Colors.green.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
+                          child: Column(children: [
+                            Row(children: [
+                              // Date picker
+                              Expanded(
+                                child: InkWell(
+                                  onTap: _pickDate,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(color: Colors.grey.withOpacity(0.2)),
+                                    ),
+                                    child: Row(children: [
+                                      const Icon(Icons.calendar_today, size: 16, color: Colors.blue),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        '${_selectedDate.day}/${_selectedDate.month}/${_selectedDate.year}',
+                                        style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+                                      ),
+                                    ]),
+                                  ),
                                 ),
-                                child: Text('P',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: state == true ? Colors.white : Colors.green,
-                                    )),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            // Absent button
-                            InkWell(
-                              onTap: () => setState(() => _attendanceState[student.id] = false),
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              const SizedBox(width: 8),
+                              // Period selector
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
                                 decoration: BoxDecoration(
-                                  color: state == false ? Colors.red : Colors.red.withOpacity(0.08),
-                                  borderRadius: BorderRadius.circular(8),
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.grey.withOpacity(0.2)),
                                 ),
-                                child: Text('A',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      color: state == false ? Colors.white : Colors.red,
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<int>(
+                                    value: _periodNumber,
+                                    items: List.generate(8, (i) => DropdownMenuItem(
+                                      value: i + 1,
+                                      child: Text('P${i + 1}', style: const TextStyle(fontSize: 13)),
                                     )),
+                                    onChanged: (v) => setState(() => _periodNumber = v ?? 1),
+                                  ),
+                                ),
                               ),
+                              const SizedBox(width: 8),
+                              // Class filter — only assigned classes
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: Colors.green.withOpacity(0.2)),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    value: _selectedClass,
+                                    items: _assignedClasses.map((c) {
+                                      final isNum = int.tryParse(c) != null;
+                                      return DropdownMenuItem(
+                                        value: c,
+                                        child: Text(isNum ? 'C $c' : c, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (v) => setState(() {
+                                      _selectedClass = v ?? _assignedClasses.first;
+                                      _attendanceState.clear();
+                                    }),
+                                  ),
+                                ),
+                              ),
+                            ]),
+                            const SizedBox(height: 8),
+                            // Stats bar
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceAround,
+                              children: [
+                                _statChip('Total', '${students.length}', Colors.blue),
+                                _statChip('Present', '$_presentCount', Colors.green),
+                                _statChip('Absent', '$_absentCount', Colors.red),
+                                _statChip('Unmarked', '${students.length - _markedCount}', Colors.grey),
+                              ],
                             ),
-                          ],
+                          ]),
                         ),
-                      ),
+
+                        // Student List
+                        Expanded(
+                          child: students.isEmpty
+                              ? Center(child: Text('No students in this class', style: TextStyle(color: Colors.grey[500])))
+                              : ListView.builder(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  itemCount: students.length,
+                                  itemBuilder: (ctx, i) {
+                                    final student = students[i];
+                                    final state = _attendanceState[student.id];
+
+                                    Color bgColor;
+                                    if (state == true) {
+                                      bgColor = Colors.green.withOpacity(0.06);
+                                    } else if (state == false) {
+                                      bgColor = Colors.red.withOpacity(0.06);
+                                    } else {
+                                      bgColor = Colors.transparent;
+                                    }
+
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 4),
+                                      decoration: BoxDecoration(
+                                        color: bgColor,
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(
+                                          color: state == null ? Colors.grey.withOpacity(0.15)
+                                              : state == true ? Colors.green.withOpacity(0.2)
+                                              : Colors.red.withOpacity(0.2),
+                                        ),
+                                      ),
+                                      child: ListTile(
+                                        dense: true,
+                                        leading: CircleAvatar(
+                                          radius: 16,
+                                          backgroundColor: state == null ? Colors.grey.withOpacity(0.1)
+                                              : state == true ? Colors.green.withOpacity(0.1)
+                                              : Colors.red.withOpacity(0.1),
+                                          child: Text('${i + 1}', style: TextStyle(
+                                            fontSize: 12, fontWeight: FontWeight.bold,
+                                            color: state == null ? Colors.grey : state == true ? Colors.green : Colors.red,
+                                          )),
+                                        ),
+                                        title: Text(student.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                        subtitle: Text('Roll: ${student.rollNumber}',
+                                            style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                        trailing: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            InkWell(
+                                              onTap: () => setState(() => _attendanceState[student.id] = true),
+                                              borderRadius: BorderRadius.circular(8),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: state == true ? Colors.green : Colors.green.withOpacity(0.08),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text('P', style: TextStyle(
+                                                  fontWeight: FontWeight.bold, fontSize: 13,
+                                                  color: state == true ? Colors.white : Colors.green,
+                                                )),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            InkWell(
+                                              onTap: () => setState(() => _attendanceState[student.id] = false),
+                                              borderRadius: BorderRadius.circular(8),
+                                              child: Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                                decoration: BoxDecoration(
+                                                  color: state == false ? Colors.red : Colors.red.withOpacity(0.08),
+                                                  borderRadius: BorderRadius.circular(8),
+                                                ),
+                                                child: Text('A', style: TextStyle(
+                                                  fontWeight: FontWeight.bold, fontSize: 13,
+                                                  color: state == false ? Colors.white : Colors.red,
+                                                )),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
                     );
                   },
                 ),
-              ),
-            ],
-          );
-        },
-      ),
     );
   }
 
   Widget _statChip(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10)),
-      ],
-    );
+    return Column(children: [
+      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
+      Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+    ]);
   }
 }

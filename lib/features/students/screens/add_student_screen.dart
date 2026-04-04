@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/student_repository.dart';
+import '../../../core/constants/class_constants.dart';
 import '../../../../models/student_model.dart';
 import '../../../../core/utils/validator_service.dart';
 
@@ -48,7 +49,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   final _prevSchoolCtrl = TextEditingController();
   final _prevClassCtrl = TextEditingController();
 
-  static const _classes = ['LKG', 'UKG', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+  static final _classes = ClassConstants.allClasses;
   static const _genders = ['Male', 'Female', 'Other'];
   static const _categories = ['General', 'OBC', 'SC', 'ST', 'EWS'];
   static const _religions = ['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Other'];

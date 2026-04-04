@@ -17,6 +17,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   List<Map<String, dynamic>> _children = [];
   int _selectedChildIndex = 0;
   Map<String, dynamic> _summary = {};
+  Map<String, dynamic> _studentDetails = {};
   bool _isLoading = true;
 
   @override
@@ -45,7 +46,38 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         if (children.isNotEmpty) {
           _loadStudentSummary(children[0]['id']);
         } else {
-          // No linked children — show demo data
+          // No linked children — fetch a mock student to show demo data
+          final pullResp = await http.get(
+            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+            headers: {'Authorization': 'Bearer ${session.token}'},
+          );
+          if (pullResp.statusCode == 200) {
+            final pullData = jsonDecode(pullResp.body);
+            final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+            
+            // Provide a static demo student if DB is completely empty
+            final demoStudent = students.isNotEmpty 
+                ? students.first 
+                : { 'id': 'demo123', 'name': 'Demo Student', 'class_id': '10' };
+
+            setState(() {
+              _children = [
+                {
+                  'id': demoStudent['id'],
+                  'name': demoStudent['name'],
+                  'class_id': demoStudent['class_id'],
+                }
+              ];
+            });
+            
+            if (students.isNotEmpty) {
+              _loadStudentSummary(demoStudent['id']);
+            } else {
+              // No DB at all, just stop loading
+              setState(() => _isLoading = false);
+            }
+            return;
+          }
           setState(() => _isLoading = false);
         }
       } else {
@@ -63,6 +95,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     if (session == null) return;
 
     try {
+      // Fetch summary
       final response = await http.get(
         Uri.parse('$BASE_URL/parent/student-summary/$studentId'),
         headers: {'Authorization': 'Bearer ${session.token}'},
@@ -70,14 +103,31 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          _summary = data['data'] ?? {};
-          _isLoading = false;
-        });
+        setState(() => _summary = data['data'] ?? {});
+      }
+
+      // Fetch full student details from sync/pull
+      final pullResp = await http.get(
+        Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
+
+      if (pullResp.statusCode == 200) {
+        final pullData = jsonDecode(pullResp.body);
+        final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+        final match = students.where((s) => s['id'] == studentId).toList();
+        if (match.isNotEmpty) {
+          setState(() => _studentDetails = match.first);
+        } else {
+          // Use basic info from _children
+          final child = _children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{};
+          setState(() => _studentDetails = Map<String, dynamic>.from(child));
+        }
       }
     } catch (e) {
       debugPrint('Summary error: $e');
-      setState(() => _isLoading = false);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -93,9 +143,13 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Text("My Child's Dashboard",
-                  style: Theme.of(context).textTheme.headlineSmall
-                      ?.copyWith(fontWeight: FontWeight.bold)),
+              Text(
+                _children.isNotEmpty
+                    ? '${_children[_selectedChildIndex]['name'] ?? 'My Child'}\'s Dashboard'
+                    : "My Child's Dashboard",
+                style: Theme.of(context).textTheme.headlineSmall
+                    ?.copyWith(fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 4),
               Text('Pull down to refresh', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
               const SizedBox(height: 12),
@@ -146,6 +200,13 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                     },
                   ),
                 ),
+
+              // ── Child Profile Card ──
+              if (!_isLoading && _children.isNotEmpty)
+                _buildChildProfileCard(),
+
+              if (!_isLoading && _children.isNotEmpty)
+                const SizedBox(height: 14),
 
               // ── Loading State ──
               if (_isLoading)
@@ -249,6 +310,193 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     final alerts = _summary['alerts'] as List? ?? [];
     final unread = alerts.where((a) => a['is_read'] == false).length;
     return unread > 0 ? '$unread Unread' : 'All Read';
+  }
+
+  // ── Child Profile Card ──
+  Widget _buildChildProfileCard() {
+    // Use _studentDetails if available, fallback to basic _children data
+    final source = _studentDetails.isNotEmpty
+        ? _studentDetails
+        : (_children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{});
+    final name = source['name']?.toString() ?? '-';
+    final classId = source['class_id']?.toString() ?? '-';
+    final rollNumber = source['roll_number']?.toString() ?? '-';
+    final gender = source['gender']?.toString() ?? '-';
+    final phone = source['phone']?.toString() ?? '-';
+
+    return InkWell(
+      onTap: _showFullChildProfile,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Colors.green[700]!, Colors.green[400]!],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 26,
+              backgroundColor: Colors.white24,
+              child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+                  const SizedBox(height: 3),
+                  Text('Class $classId  •  Roll: $rollNumber',
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text('$gender  •  $phone',
+                      style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                ],
+              ),
+            ),
+            Column(children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.white60, size: 20),
+              const SizedBox(height: 4),
+              const Text('Details', style: TextStyle(color: Colors.white60, fontSize: 9)),
+            ]),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Full Child Profile Sheet ──
+  void _showFullChildProfile() {
+    final s = _studentDetails.isNotEmpty
+        ? _studentDetails
+        : (_children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{});
+    final name = s['name']?.toString() ?? '-';
+    final classId = s['class_id']?.toString() ?? '-';
+    final rollNumber = s['roll_number']?.toString() ?? '-';
+    final gender = s['gender']?.toString() ?? '-';
+    final dob = s['date_of_birth']?.toString().split('T').first ?? '-';
+    final phone = s['phone']?.toString() ?? '-';
+    final email = s['email']?.toString() ?? '-';
+    final parentName = s['parent_name']?.toString() ?? '-';
+    final parentPhone = s['parent_phone']?.toString() ?? '-';
+    final parentOccupation = s['parent_occupation']?.toString() ?? '-';
+    final motherName = s['mother_name']?.toString() ?? '-';
+    final motherPhone = s['mother_phone']?.toString() ?? '-';
+    final address = s['address']?.toString() ?? '-';
+    final city = s['city']?.toString() ?? '';
+    final state = s['state']?.toString() ?? '';
+    final pincode = s['pincode']?.toString() ?? '';
+    final fullAddress = [address, city, state, pincode].where((v) => v.isNotEmpty && v != '-').join(', ');
+    final category = s['category']?.toString() ?? '-';
+    final religion = s['religion']?.toString() ?? '-';
+    final nationality = s['nationality']?.toString() ?? '-';
+    final bloodGroup = s['blood_group']?.toString() ?? '-';
+    final aadhar = s['aadhar_number']?.toString() ?? '-';
+    final admissionDate = s['admission_date']?.toString().split('T').first ?? '-';
+    final previousSchool = s['previous_school']?.toString() ?? '-';
+    final previousClass = s['previous_class']?.toString() ?? '-';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (ctx, scrollCtrl) => SingleChildScrollView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Column(children: [
+                  CircleAvatar(
+                    radius: 36,
+                    backgroundColor: Colors.green.withOpacity(0.12),
+                    child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'C',
+                        style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 28)),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('Class $classId  •  Roll: $rollNumber',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                ]),
+              ),
+              const SizedBox(height: 20),
+
+              _profileSection('Personal Information'),
+              _profileRow('Gender', gender),
+              _profileRow('Date of Birth', dob),
+              _profileRow('Blood Group', bloodGroup),
+              _profileRow('Phone', phone),
+              _profileRow('Email', email),
+              _profileRow('Aadhar Number', aadhar),
+
+              const SizedBox(height: 16),
+              _profileSection('Background'),
+              _profileRow('Category', category),
+              _profileRow('Religion', religion),
+              _profileRow('Nationality', nationality),
+
+              const SizedBox(height: 16),
+              _profileSection('Family Details'),
+              _profileRow("Father's Name", parentName),
+              _profileRow("Father's Phone", parentPhone),
+              _profileRow("Father's Occupation", parentOccupation),
+              _profileRow("Mother's Name", motherName),
+              _profileRow("Mother's Phone", motherPhone),
+
+              const SizedBox(height: 16),
+              _profileSection('Address'),
+              _profileRow('Full Address', fullAddress.isNotEmpty ? fullAddress : '-'),
+
+              const SizedBox(height: 16),
+              _profileSection('Education'),
+              _profileRow('Admission Date', admissionDate),
+              _profileRow('Previous School', previousSchool),
+              _profileRow('Previous Class', previousClass),
+
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _profileSection(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Container(width: 3, height: 16, decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(2))),
+        const SizedBox(width: 8),
+        Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.green[700])),
+      ]),
+    );
+  }
+
+  Widget _profileRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 130, child: Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13))),
+          Expanded(child: Text(value.isEmpty || value == 'null' ? '-' : value,
+              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
+        ],
+      ),
+    );
   }
 
   // ── Detail Sheets ──

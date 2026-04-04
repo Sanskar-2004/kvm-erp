@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/class_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import 'student_fee_detail_screen.dart';
 
 class AccountantDashboard extends ConsumerStatefulWidget {
   const AccountantDashboard({Key? key}) : super(key: key);
@@ -18,21 +20,31 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   final _searchController = TextEditingController();
 
   List<Map<String, dynamic>> _students = [];
-  List<Map<String, dynamic>> _dueStudents = [];
-  double _grandTotal = 0;
   bool _isLoading = false;
-  bool _isDueLoading = false;
+
+  // Fees overview data
+  Map<String, dynamic> _yearly = {};
+  List<Map<String, dynamic>> _recentTransactions = [];
+  List<Map<String, dynamic>> _dueStudents = [];
+  int _unpaidStudentCount = 0;
+  double _grandTotalDue = 0;
+  bool _isFeesLoading = false;
 
   // Class filter
   String _selectedClass = 'All';
-  List<String> _classes = ['All'];
+  List<String> _classes = List<String>.from(ClassConstants.allClassesWithAll);
+
+  static const _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+  ];
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _loadStudents();
-    _loadDueFees();
+    _loadFeesOverview();
   }
 
   @override
@@ -40,6 +52,12 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  double _parseNum(dynamic v) {
+    if (v == null) return 0;
+    if (v is num) return v.toDouble();
+    return double.tryParse(v.toString()) ?? 0;
   }
 
   Future<void> _loadStudents() async {
@@ -57,15 +75,21 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
         final data = jsonDecode(response.body);
         final students = List<Map<String, dynamic>>.from(data['data']['students'] ?? []);
 
-        // Extract unique classes
+        // Extract unique classes - handle both numeric and string class IDs
         final classSet = <String>{'All'};
         for (final s in students) {
-          if (s['class_id'] != null) classSet.add(s['class_id'].toString());
+          final classId = s['class_id']?.toString();
+          if (classId != null && classId.isNotEmpty) {
+            classSet.add(classId);
+          }
         }
+
+        // Merge dynamic classes with canonical list so ALL classes always show
+        final sortedClasses = ClassConstants.allClasses;
 
         setState(() {
           _students = students;
-          _classes = classSet.toList()..sort();
+          _classes = ['All', ...sortedClasses];
         });
       }
     } catch (e) {
@@ -75,28 +99,44 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     }
   }
 
-  Future<void> _loadDueFees() async {
-    setState(() => _isDueLoading = true);
+  Future<void> _loadFeesOverview() async {
+    setState(() => _isFeesLoading = true);
     try {
       final session = await ref.read(authRepositoryProvider).getSession();
       if (session == null) return;
 
-      final response = await http.get(
+      // Load finance summary
+      final finResp = await http.get(
+        Uri.parse('$BASE_URL/admin/finance-summary'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
+
+      // Load due fees
+      final dueResp = await http.get(
         Uri.parse('$BASE_URL/admin/due-fees'),
         headers: {'Authorization': 'Bearer ${session.token}'},
       );
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+      if (finResp.statusCode == 200) {
+        final finData = jsonDecode(finResp.body)['data'];
         setState(() {
-          _dueStudents = List<Map<String, dynamic>>.from(data['students'] ?? []);
-          _grandTotal = (data['grandTotal'] ?? 0).toDouble();
-          _isDueLoading = false;
+          _yearly = finData['yearly'] ?? {};
+          _recentTransactions = List<Map<String, dynamic>>.from(finData['recentTransactions'] ?? []);
+          _unpaidStudentCount = finData['unpaidStudentCount'] ?? 0;
+        });
+      }
+
+      if (dueResp.statusCode == 200) {
+        final dueData = jsonDecode(dueResp.body);
+        setState(() {
+          _dueStudents = List<Map<String, dynamic>>.from(dueData['students'] ?? []);
+          _grandTotalDue = (dueData['grandTotal'] ?? 0).toDouble();
         });
       }
     } catch (e) {
-      setState(() => _isDueLoading = false);
-      debugPrint('Load due fees error: $e');
+      debugPrint('Load fees overview error: $e');
+    } finally {
+      setState(() => _isFeesLoading = false);
     }
   }
 
@@ -132,18 +172,16 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     );
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(children: [
-            const Icon(Icons.notifications_active, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text('Alert sent to $studentName'),
-          ]),
-          backgroundColor: Colors.teal,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Row(children: [
+          const Icon(Icons.notifications_active, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Text('Alert sent to $studentName\'s parent'),
+        ]),
+        backgroundColor: Colors.teal,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ));
     }
   }
 
@@ -151,7 +189,6 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Tab Bar
         Container(
           margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
           decoration: BoxDecoration(
@@ -160,29 +197,24 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
           ),
           child: TabBar(
             controller: _tabController,
-            indicator: BoxDecoration(
-              color: Colors.teal,
-              borderRadius: BorderRadius.circular(10),
-            ),
+            indicator: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(10)),
             labelColor: Colors.white,
             unselectedLabelColor: Colors.grey[600],
             labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             dividerColor: Colors.transparent,
             tabs: const [
               Tab(text: '  Students  '),
-              Tab(text: '  Due Fees  '),
+              Tab(text: '  Fees Overview  '),
             ],
           ),
         ),
         const SizedBox(height: 8),
-
-        // Tab Content
         Expanded(
           child: TabBarView(
             controller: _tabController,
             children: [
               _buildStudentsTab(),
-              _buildDueFeesTab(),
+              _buildFeesOverviewTab(),
             ],
           ),
         ),
@@ -196,65 +228,65 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: [
-              // Class Selector Dropdown
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: Colors.teal.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.teal.withOpacity(0.15)),
-                ),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedClass,
-                    isExpanded: true,
-                    icon: const Icon(Icons.filter_list_rounded, color: Colors.teal),
-                    items: _classes.map((c) => DropdownMenuItem(
+          child: Column(children: [
+            // Class Selector Dropdown
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.teal.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.teal.withOpacity(0.15)),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _selectedClass,
+                  isExpanded: true,
+                  icon: const Icon(Icons.filter_list_rounded, color: Colors.teal),
+                  items: _classes.map((c) {
+                    String label;
+                    if (c == 'All') {
+                      label = 'All Classes';
+                    } else if (int.tryParse(c) != null) {
+                      label = 'Class $c';
+                    } else {
+                      label = c; // Nursery, KG1, KG2
+                    }
+                    return DropdownMenuItem(
                       value: c,
-                      child: Text(c == 'All' ? 'All Classes' : 'Class $c',
-                          style: const TextStyle(fontWeight: FontWeight.w500)),
-                    )).toList(),
-                    onChanged: (v) => setState(() => _selectedClass = v ?? 'All'),
-                  ),
+                      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+                    );
+                  }).toList(),
+                  onChanged: (v) => setState(() => _selectedClass = v ?? 'All'),
                 ),
               ),
-              const SizedBox(height: 10),
-
-              // Search
-              TextField(
-                controller: _searchController,
-                onChanged: (_) => setState(() {}),
-                decoration: InputDecoration(
-                  hintText: 'Search student...',
-                  prefixIcon: const Icon(Icons.search, size: 20),
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
+            ),
+            const SizedBox(height: 10),
+            // Search
+            TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                hintText: 'Search student...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                filled: true,
+                fillColor: Colors.grey[50],
               ),
-            ],
-          ),
+            ),
+          ]),
         ),
         const SizedBox(height: 8),
-
-        // Student count
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Text(
-              '${_filteredStudents.length} students',
-              style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
-            ),
+            child: Text('${_filteredStudents.length} students',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500)),
           ),
         ),
         const SizedBox(height: 4),
-
-        // List
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
@@ -290,10 +322,27 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                                 style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                             subtitle: Text('Class ${student['class_id'] ?? '-'}',
                                 style: TextStyle(fontSize: 12, color: Colors.grey[500])),
-                            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.teal, size: 20),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: Icon(Icons.notifications_active_rounded, color: Colors.orange[600], size: 20),
+                                  tooltip: 'Alert Parent',
+                                  onPressed: () => _sendAlert(
+                                    student['id'] ?? '', student['name'] ?? 'Student',
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                ),
+                                const Icon(Icons.chevron_right_rounded, color: Colors.teal, size: 20),
+                              ],
+                            ),
                             onTap: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => FeeCalendarScreen(
-                                studentId: student['id'], studentName: student['name'] ?? 'Unknown',
+                              MaterialPageRoute(builder: (_) => StudentFeeDetailScreen(
+                                studentId: student['id'] ?? '',
+                                studentName: student['name'] ?? 'Unknown',
+                                classId: student['class_id']?.toString() ?? '-',
                               )),
                             ),
                           ),
@@ -305,489 +354,237 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     );
   }
 
-  // ── TAB 2: Due Fees Overview ──
-  Widget _buildDueFeesTab() {
-    return Column(
-      children: [
-        // Grand Total Banner
-        Container(
-          margin: const EdgeInsets.all(16),
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Colors.red[700]!, Colors.red[400]!],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.account_balance_wallet, color: Colors.white, size: 36),
-              const SizedBox(width: 16),
-              Column(
+  // ── TAB 2: Fees Overview ──
+  Widget _buildFeesOverviewTab() {
+    final totalExpected = _parseNum(_yearly['total_due']);
+    final totalCollected = _parseNum(_yearly['total_paid']);
+    final totalPending = _parseNum(_yearly['total_pending']);
+    final progress = totalExpected > 0 ? (totalCollected / totalExpected).clamp(0.0, 1.0) : 0.0;
+    final paidStudents = _students.length - _unpaidStudentCount;
+
+    return _isFeesLoading
+        ? const Center(child: CircularProgressIndicator())
+        : RefreshIndicator(
+            onRefresh: _loadFeesOverview,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Total Pending Revenue', style: TextStyle(color: Colors.white70, fontSize: 12)),
-                  const SizedBox(height: 4),
-                  Text(
-                    '₹${_grandTotal.toStringAsFixed(0)}',
-                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                  // ── Summary Cards ──
+                  Row(children: [
+                    Expanded(child: _statCard('Expected', '₹${totalExpected.toStringAsFixed(0)}', Icons.account_balance_rounded, Colors.blue)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _statCard('Collected', '₹${totalCollected.toStringAsFixed(0)}', Icons.trending_up_rounded, Colors.green)),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: _statCard('Pending', '₹${totalPending.toStringAsFixed(0)}', Icons.trending_down_rounded, Colors.red)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _statCard('Due Students', '$_unpaidStudentCount', Icons.person_off_rounded, Colors.orange)),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: _statCard('Paid Students', '${paidStudents > 0 ? paidStudents : 0}', Icons.check_circle_rounded, Colors.teal)),
+                    const SizedBox(width: 10),
+                    Expanded(child: _statCard('Total Students', '${_students.length}', Icons.people_rounded, Colors.indigo)),
+                  ]),
+                  const SizedBox(height: 16),
+
+                  // ── Collection Progress ──
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.blue.withOpacity(0.12)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Collection Progress', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                            Text('${(progress * 100).toStringAsFixed(1)}%',
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700])),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 10,
+                            backgroundColor: Colors.grey[200],
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              progress > 0.7 ? Colors.green : progress > 0.4 ? Colors.orange : Colors.red,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                '${_dueStudents.length}\nstudents',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
+                  const SizedBox(height: 20),
 
-        // Unpaid Students List
-        Expanded(
-          child: _isDueLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _dueStudents.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.check_circle, size: 56, color: Colors.green[300]),
-                          const SizedBox(height: 8),
-                          Text('All fees collected!', style: TextStyle(color: Colors.grey[500])),
-                        ],
-                      ),
+                  // ── Last 10 Transactions ──
+                  Text('Last 10 Transactions',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 12),
+
+                  if (_recentTransactions.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(32),
+                      alignment: Alignment.center,
+                      child: Column(children: [
+                        Icon(Icons.receipt_long_rounded, size: 48, color: Colors.grey[300]),
+                        const SizedBox(height: 8),
+                        Text('No transactions yet', style: TextStyle(color: Colors.grey[500])),
+                      ]),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: _dueStudents.length,
-                      itemBuilder: (context, index) {
-                        final student = _dueStudents[index];
-                        final due = double.tryParse(student['total_due']?.toString() ?? '0') ?? 0;
+                  else
+                    ...List.generate(_recentTransactions.length, (index) {
+                      final txn = _recentTransactions[index];
+                      final amount = _parseNum(txn['amount_paid']);
+                      final totalDue = _parseNum(txn['amount_due']);
+                      final remaining = totalDue - amount;
+                      final month = txn['month'] is int ? txn['month'] as int : 0;
+                      final method = txn['payment_method']?.toString() ?? 'N/A';
+                      final paidDate = txn['paid_date']?.toString().split('T').first ?? '';
 
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
+                      final methodIcon = method == 'UPI' ? Icons.phone_android_rounded
+                          : method == 'Cheque' ? Icons.description_rounded
+                          : method == 'Bank Transfer' ? Icons.account_balance_rounded
+                          : Icons.money_rounded;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                        ),
+                        child: Row(children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: Colors.green.withOpacity(0.1),
+                            child: Text('${index + 1}',
+                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(txn['student_name']?.toString() ?? 'Unknown',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                              const SizedBox(height: 2),
+                              Row(children: [
+                                Icon(methodIcon, size: 13, color: Colors.grey[400]),
+                                const SizedBox(width: 4),
+                                Text(method, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                if (month > 0 && month <= 12) ...[
+                                  const SizedBox(width: 6),
+                                  Text('• ${_monthNames[month - 1]}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                ],
+                                if (paidDate.isNotEmpty) ...[
+                                  const SizedBox(width: 6),
+                                  Text('• $paidDate', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                                ],
+                              ]),
+                            ]),
+                          ),
+                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Text('₹${amount.toStringAsFixed(0)}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15)),
+                            if (remaining > 0)
+                              Text('Left: ₹${remaining.toStringAsFixed(0)}',
+                                  style: TextStyle(fontSize: 10, color: Colors.red[400], fontWeight: FontWeight.w500)),
+                          ]),
+                        ]),
+                      );
+                    }),
+
+                  // ── Due Students Quick List ──
+                  if (_dueStudents.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Students with Dues',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.04),
+                            color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text('₹${_grandTotalDue.toStringAsFixed(0)} total',
+                              style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.w600)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ...List.generate(
+                      _dueStudents.length > 10 ? 10 : _dueStudents.length,
+                      (index) {
+                        final student = _dueStudents[index];
+                        final due = _parseNum(student['total_due']);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.03),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.red.withOpacity(0.12)),
+                            border: Border.all(color: Colors.red.withOpacity(0.1)),
                           ),
                           child: ListTile(
                             dense: true,
                             leading: CircleAvatar(
-                              radius: 18,
+                              radius: 16,
                               backgroundColor: Colors.red.withOpacity(0.1),
-                              child: Text(
-                                (student['student_name'] ?? 'S')[0].toUpperCase(),
-                                style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
+                              child: Text((student['student_name'] ?? 'S')[0].toUpperCase(),
+                                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
                             ),
                             title: Text(student['student_name'] ?? 'Unknown',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
                             subtitle: Text('Class ${student['class_id'] ?? '-'} • Due: ₹${due.toStringAsFixed(0)}',
-                                style: TextStyle(fontSize: 12, color: Colors.red[400])),
+                                style: TextStyle(fontSize: 11, color: Colors.red[400])),
                             trailing: IconButton(
-                              icon: Icon(Icons.notifications_active_rounded, color: Colors.orange[700], size: 22),
+                              icon: Icon(Icons.notifications_active_rounded, color: Colors.orange[700], size: 20),
                               tooltip: 'Send Alert',
-                              onPressed: () => _sendAlert(
-                                student['student_id'] ?? '',
-                                student['student_name'] ?? 'Student',
-                              ),
+                              onPressed: () => _sendAlert(student['student_id'] ?? '', student['student_name'] ?? 'Student'),
                             ),
                           ),
                         );
                       },
                     ),
-        ),
-      ],
-    );
-  }
-}
-
-// ── Fee Calendar Screen (12-Month View with Discount Math) ──
-class FeeCalendarScreen extends ConsumerStatefulWidget {
-  final String studentId;
-  final String studentName;
-
-  const FeeCalendarScreen({Key? key, required this.studentId, required this.studentName}) : super(key: key);
-
-  @override
-  ConsumerState<FeeCalendarScreen> createState() => _FeeCalendarScreenState();
-}
-
-class _FeeCalendarScreenState extends ConsumerState<FeeCalendarScreen> {
-  List<Map<String, dynamic>> _fees = [];
-  bool _isLoading = true;
-  final String _academicYear = '2026-2027';
-
-  static const _monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadFees();
-  }
-
-  Future<void> _loadFees() async {
-    final session = await ref.read(authRepositoryProvider).getSession();
-    if (session == null) return;
-
-    try {
-      final response = await http.get(
-        Uri.parse('$BASE_URL/fees/${widget.studentId}/$_academicYear'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _fees = List<Map<String, dynamic>>.from(data['fees']);
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      setState(() => _isLoading = false);
-      debugPrint('Load fees error: $e');
-    }
-  }
-
-  // Summary calculations
-  double get _totalDue => _fees.fold(0, (sum, f) => sum + (double.tryParse(f['amount_due']?.toString() ?? '0') ?? 0));
-  double get _totalPaid => _fees.fold(0, (sum, f) => sum + (double.tryParse(f['amount_paid']?.toString() ?? '0') ?? 0));
-  double get _totalDiscount => _fees.fold(0, (sum, f) => sum + (double.tryParse(f['discount_amount']?.toString() ?? '0') ?? 0));
-  double get _netRemaining => _totalDue - _totalPaid - _totalDiscount;
-  int get _paidCount => _fees.where((f) => f['status'] == 'PAID').length;
-
-  void _showPaymentDialog(Map<String, dynamic> fee) {
-    final amountDue = double.tryParse(fee['amount_due']?.toString() ?? '0') ?? 0;
-    final discount = double.tryParse(fee['discount_amount']?.toString() ?? '0') ?? 0;
-    final effectiveDue = amountDue - discount;
-    final amountController = TextEditingController(text: effectiveDue.toStringAsFixed(0));
-    final discountController = TextEditingController(text: discount.toStringAsFixed(0));
-    final discountReasonController = TextEditingController(text: fee['discount_reason']?.toString() ?? '');
-    String selectedStatus = 'PAID';
-    String selectedMethod = fee['payment_method']?.toString() ?? 'Cash';
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              Icon(Icons.payment_rounded, color: Colors.teal[700], size: 22),
-              const SizedBox(width: 8),
-              Text('${_monthNames[(fee['month'] ?? 1) - 1]}',
-                  style: const TextStyle(fontSize: 18)),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Fee breakdown
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[50],
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Column(
-                    children: [
-                      _feeRow('Base Fee', '₹${amountDue.toStringAsFixed(0)}'),
-                      _feeRow('Discount', '- ₹${discount.toStringAsFixed(0)}', color: Colors.green),
-                      const Divider(),
-                      _feeRow('Net Due', '₹${effectiveDue.toStringAsFixed(0)}', bold: true),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Amount
-                TextField(
-                  controller: amountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Amount Paid',
-                    prefixText: '₹ ',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Discount
-                TextField(
-                  controller: discountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    labelText: 'Discount Amount',
-                    prefixText: '₹ ',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Discount Reason
-                TextField(
-                  controller: discountReasonController,
-                  decoration: InputDecoration(
-                    labelText: 'Discount Reason',
-                    hintText: 'e.g., Sibling discount',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Payment Method
-                DropdownButtonFormField<String>(
-                  value: selectedMethod,
-                  items: ['Cash', 'Cheque', 'UPI', 'Bank Transfer']
-                      .map((m) => DropdownMenuItem(value: m, child: Text(m)))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() => selectedMethod = v ?? 'Cash'),
-                  decoration: InputDecoration(
-                    labelText: 'Payment Method',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Status
-                DropdownButtonFormField<String>(
-                  value: selectedStatus,
-                  items: ['PAID', 'PARTIAL']
-                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                      .toList(),
-                  onChanged: (v) => setDialogState(() => selectedStatus = v ?? 'PAID'),
-                  decoration: InputDecoration(
-                    labelText: 'Status',
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                    isDense: true,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-            ElevatedButton.icon(
-              onPressed: () async {
-                final session = await ref.read(authRepositoryProvider).getSession();
-                if (session == null) return;
-
-                await http.put(
-                  Uri.parse('$BASE_URL/fees/${fee['id']}'),
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer ${session.token}',
-                  },
-                  body: jsonEncode({
-                    'amount_paid': double.tryParse(amountController.text) ?? 0,
-                    'status': selectedStatus,
-                    'paid_date': DateTime.now().toIso8601String(),
-                  }),
-                );
-
-                if (ctx.mounted) Navigator.pop(ctx);
-                _loadFees();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Payment recorded ✅'),
-                      backgroundColor: Colors.green[700],
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                }
-              },
-              icon: const Icon(Icons.check, size: 18),
-              label: const Text('Save'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ],
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
+          );
   }
 
-  Widget _feeRow(String label, String value, {Color? color, bool bold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _statCard(String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-          Text(value, style: TextStyle(
-            color: color ?? Colors.black87,
-            fontWeight: bold ? FontWeight.bold : FontWeight.normal,
-            fontSize: bold ? 15 : 13,
-          )),
+          Icon(icon, color: color, size: 22),
+          const SizedBox(height: 8),
+          Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+          ),
         ],
       ),
     );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.studentName),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadFees),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _fees.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.receipt_long, size: 56, color: Colors.grey[300]),
-                      const SizedBox(height: 12),
-                      Text('No fee records for $_academicYear',
-                          style: TextStyle(color: Colors.grey[500])),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _generateFees,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Generate Fee Records'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.teal,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : Column(
-                  children: [
-                    // Summary bar
-                    Container(
-                      margin: const EdgeInsets.all(16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.teal.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.teal.withOpacity(0.15)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        children: [
-                          _summaryItem('Paid', '₹${_totalPaid.toStringAsFixed(0)}', Colors.green),
-                          Container(width: 1, height: 30, color: Colors.grey[300]),
-                          _summaryItem('Remaining', '₹${_netRemaining.toStringAsFixed(0)}', Colors.red),
-                          Container(width: 1, height: 30, color: Colors.grey[300]),
-                          _summaryItem('Months', '$_paidCount/12', Colors.blue),
-                        ],
-                      ),
-                    ),
-
-                    // Month List
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _fees.length,
-                        itemBuilder: (context, index) {
-                          final fee = _fees[index];
-                          final month = (fee['month'] ?? 1) as int;
-                          final status = (fee['status'] ?? 'UNPAID') as String;
-                          final amountDue = double.tryParse(fee['amount_due']?.toString() ?? '0') ?? 0;
-                          final amountPaid = double.tryParse(fee['amount_paid']?.toString() ?? '0') ?? 0;
-                          final discount = double.tryParse(fee['discount_amount']?.toString() ?? '0') ?? 0;
-                          final netDue = amountDue - discount - amountPaid;
-
-                          final statusColor = status == 'PAID'
-                              ? Colors.green : status == 'PARTIAL'
-                              ? Colors.orange : Colors.red;
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            decoration: BoxDecoration(
-                              color: statusColor.withOpacity(0.04),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: statusColor.withOpacity(0.15)),
-                            ),
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
-                              leading: CircleAvatar(
-                                radius: 18,
-                                backgroundColor: statusColor.withOpacity(0.12),
-                                child: Text('$month', style: TextStyle(color: statusColor, fontWeight: FontWeight.bold, fontSize: 14)),
-                              ),
-                              title: Text(_monthNames[month - 1], style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                              subtitle: Text(
-                                'Paid: ₹${amountPaid.toStringAsFixed(0)} / Due: ₹${amountDue.toStringAsFixed(0)}'
-                                '${discount > 0 ? ' (Disc: ₹${discount.toStringAsFixed(0)})' : ''}',
-                                style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                              ),
-                              trailing: Chip(
-                                label: Text(status, style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold)),
-                                backgroundColor: statusColor.withOpacity(0.1),
-                                side: BorderSide.none,
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              onTap: () => _showPaymentDialog(fee),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-    );
-  }
-
-  Widget _summaryItem(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 16)),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
-      ],
-    );
-  }
-
-  Future<void> _generateFees() async {
-    final session = await ref.read(authRepositoryProvider).getSession();
-    if (session == null) return;
-
-    await http.post(
-      Uri.parse('$BASE_URL/fees/generate/${widget.studentId}'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ${session.token}',
-      },
-      body: jsonEncode({'academic_year': _academicYear, 'monthly_amount': 5000}),
-    );
-
-    _loadFees();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Fee records generated ✅'),
-          backgroundColor: Colors.green[700],
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
-      );
-    }
   }
 }

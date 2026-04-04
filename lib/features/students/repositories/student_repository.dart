@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
 
@@ -86,7 +87,7 @@ class StudentRepository {
         'table_name': tableName,
         'record_id': recordId,
         'action': action,
-        'data': data.toString(), 
+        'data': jsonEncode(data), 
         'created_at': DateTime.now().toIso8601String(),
         'synced': 0,
         'attempt_count': 0,

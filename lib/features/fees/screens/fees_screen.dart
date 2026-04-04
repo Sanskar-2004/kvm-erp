@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../students/repositories/student_repository.dart';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
+import '../../../core/constants/class_constants.dart';
 
 class FeesScreen extends ConsumerStatefulWidget {
   const FeesScreen({super.key});
@@ -17,7 +18,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
   Map<String, Map<String, dynamic>> _feeMap = {}; // studentId -> fee summary
   bool _isLoading = true;
 
-  final _classes = ['All', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+  final _classes = ClassConstants.allClassesWithAll;
 
   @override
   void initState() {

@@ -4,6 +4,7 @@ import '../../features/auth/providers/auth_provider.dart';
 import '../../features/dashboard/screens/admin_dashboard.dart';
 import '../../features/dashboard/screens/teacher_dashboard.dart';
 import '../../features/dashboard/screens/parent_dashboard.dart';
+import '../../features/dashboard/screens/student_dashboard.dart';
 import '../../features/dashboard/screens/accountant_dashboard.dart';
 import '../../features/students/screens/students_screen.dart';
 import '../../features/attendance/screens/attendance_screen.dart';
@@ -78,7 +79,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
       case UserRole.student:
         screens = [
-          const ParentDashboard(),
+          const StudentDashboard(),
           const FeesScreen(),
         ];
         navItems = const [

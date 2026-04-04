@@ -75,6 +75,13 @@ exports.syncPush = async (req, res) => {
             }
 
             syncResults[tableName] = { upserted: successfulUpserts, errors };
+            if (errors.length > 0) {
+                return res.status(400).json({ 
+                    status: 'error', 
+                    message: `Postgres rejected records in ${tableName}`,
+                    details: errors 
+                });
+            }
         }
 
         res.json({

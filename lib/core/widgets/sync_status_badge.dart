@@ -128,6 +128,8 @@ class SyncStatusBadge extends ConsumerWidget {
         await ref.read(syncServiceProvider).runSyncSafe();
       }
 
+      if (!context.mounted) return;
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setInt('last_sync_at', DateTime.now().millisecondsSinceEpoch);
 
@@ -143,24 +145,23 @@ class SyncStatusBadge extends ConsumerWidget {
         }
       });
 
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white, size: 18),
-                SizedBox(width: 8),
-                Text('Sync completed'),
-              ],
-            ),
-            backgroundColor: Colors.green[700],
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            duration: const Duration(seconds: 2),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white, size: 18),
+              SizedBox(width: 8),
+              Text('Sync completed'),
+            ],
           ),
-        );
-      }
+          backgroundColor: Colors.green[700],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          duration: const Duration(seconds: 2),
+        ),
+      );
     } catch (e) {
+      if (!context.mounted) return;
       ref.read(syncStateProvider.notifier).state = SyncState.error;
 
       if (context.mounted) {

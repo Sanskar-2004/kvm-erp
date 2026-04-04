@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/student_repository.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
 import '../../../../models/student_model.dart';
+import '../../../core/constants/class_constants.dart';
 import 'add_student_screen.dart';
 import 'student_detail_screen.dart';
 
@@ -25,33 +26,13 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   String _sortBy = 'Name';
   String _searchQuery = '';
 
-  // Extracted from actual data
-  List<String> _availableClasses = ['All'];
-  List<String> _availableGenders = ['All'];
-  List<String> _availableCategories = ['All'];
+  // Canonical filter options (not dynamically extracted)
+  final List<String> _availableClasses = ClassConstants.allClassesWithAll;
+  static const _availableGenders = ['All', 'Male', 'Female', 'Other'];
+  static const _availableCategories = ['All', 'General', 'OBC', 'SC', 'ST', 'EWS', 'Others'];
 
   void _extractFilterOptions(List<StudentModel> students) {
-    final classSet = <String>{'All'};
-    final genderSet = <String>{'All'};
-    final categorySet = <String>{'All'};
-
-    for (final s in students) {
-      if (s.classId.isNotEmpty) classSet.add(s.classId);
-      if (s.gender.isNotEmpty) genderSet.add(s.gender);
-      if (s.category != null && s.category!.isNotEmpty) categorySet.add(s.category!);
-    }
-
-    _availableClasses = classSet.toList()..sort((a, b) {
-      if (a == 'All') return -1;
-      if (b == 'All') return 1;
-      // Try numeric sort
-      final aNum = int.tryParse(a);
-      final bNum = int.tryParse(b);
-      if (aNum != null && bNum != null) return aNum.compareTo(bNum);
-      return a.compareTo(b);
-    });
-    _availableGenders = genderSet.toList()..sort();
-    _availableCategories = categorySet.toList()..sort();
+    // Filter options are now canonical constants, no extraction needed
   }
 
   List<StudentModel> _applyFilters(List<StudentModel> students) {
@@ -81,9 +62,8 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         filtered.sort((a, b) => a.rollNumber.compareTo(b.rollNumber));
       case 'Class':
         filtered.sort((a, b) {
-          final aNum = int.tryParse(a.classId) ?? 999;
-          final bNum = int.tryParse(b.classId) ?? 999;
-          if (aNum != bNum) return aNum.compareTo(bNum);
+          final cmp = ClassConstants.compareClasses(a.classId, b.classId);
+          if (cmp != 0) return cmp;
           return a.name.compareTo(b.name);
         });
     }
@@ -103,6 +83,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         title: const Text('All Students'),
       ),
       floatingActionButton: FloatingActionButton.extended(
+        heroTag: null,
         onPressed: () async {
           final result = await Navigator.push(
             context,
@@ -317,77 +298,68 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     );
   }
 
-  // ── Quick pickers (popup menus) ──
+  // ── Popup pickers (appear near the chip) ──
   void _showClassPicker() {
-    _showPickerSheet('Select Class', _availableClasses, _selectedClass, (v) {
+    _showPopupPicker('Class', _availableClasses, _selectedClass, Colors.blue, (v) {
       setState(() => _selectedClass = v);
     });
   }
 
   void _showGenderPicker() {
-    _showPickerSheet('Select Gender', _availableGenders, _selectedGender, (v) {
+    _showPopupPicker('Gender', _availableGenders, _selectedGender, Colors.purple, (v) {
       setState(() => _selectedGender = v);
     });
   }
 
   void _showCategoryPicker() {
-    _showPickerSheet('Select Category', _availableCategories, _selectedCategory, (v) {
+    _showPopupPicker('Category', _availableCategories, _selectedCategory, Colors.teal, (v) {
       setState(() => _selectedCategory = v);
     });
   }
 
   void _showSortPicker() {
-    _showPickerSheet('Sort By', ['Name', 'Roll', 'Class'], _sortBy, (v) {
+    _showPopupPicker('Sort', ['Name', 'Roll', 'Class'], _sortBy, Colors.orange, (v) {
       setState(() => _sortBy = v);
     });
   }
 
-  void _showPickerSheet(String title, List<String> options, String current, void Function(String) onSelect) {
-    showModalBottomSheet(
+  void _showPopupPicker(String title, List<String> options, String current, Color color, void Function(String) onSelect) {
+    showDialog(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: options.map((opt) {
-                final isSelected = current == opt;
-                return GestureDetector(
-                  onTap: () {
-                    onSelect(opt);
-                    Navigator.pop(ctx);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue[700] : Colors.grey.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: isSelected ? Colors.blue[700]! : Colors.grey.withOpacity(0.2),
-                      ),
-                    ),
-                    child: Text(
-                      opt,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? Colors.white : Colors.black87,
-                      ),
-                    ),
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Select $title', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        content: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((opt) {
+            final isSelected = current == opt;
+            return GestureDetector(
+              onTap: () {
+                onSelect(opt);
+                Navigator.pop(ctx);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isSelected ? color : Colors.grey.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isSelected ? color : Colors.grey.withOpacity(0.2),
                   ),
-                );
-              }).toList(),
-            ),
-          ],
+                ),
+                child: Text(
+                  opt,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
         ),
       ),
     );
@@ -501,7 +473,18 @@ class _StudentCard extends StatelessWidget {
                       ),
                       child: Text(student.category!, style: const TextStyle(fontSize: 9, color: Colors.teal, fontWeight: FontWeight.w600)),
                     ),
-                  const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
+                  Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                        onPressed: onDelete,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                      const SizedBox(width: 8),
+                      const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
+                    ],
+                  ),
                 ],
               ),
             ],
