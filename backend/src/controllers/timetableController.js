@@ -61,7 +61,10 @@ exports.getTeacherTimetable = async (req, res) => {
     try {
         const { teacherId } = req.params;
         const result = await db.query(
-            `SELECT * FROM timetable WHERE teacher_id = $1 AND is_deleted = 0 ORDER BY day_of_week, period_number`,
+            `SELECT t.* FROM timetable t 
+             JOIN staff s ON t.teacher_id = s.id 
+             WHERE s.user_id = $1 AND t.is_deleted = 0 
+             ORDER BY t.day_of_week, t.period_number`,
             [teacherId]
         );
         res.json({ status: 'success', timetable: result.rows });
