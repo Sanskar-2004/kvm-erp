@@ -13,6 +13,28 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP::TEXT
 );
 
+CREATE TABLE IF NOT EXISTS staff (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    phone TEXT,
+    email TEXT,
+    role TEXT NOT NULL CHECK (role IN ('teacher', 'driver', 'peon', 'accountant', 'principal', 'librarian', 'security')),
+    employee_code TEXT UNIQUE,
+    department TEXT,
+    joining_date TEXT,
+    salary REAL DEFAULT 0.0,
+    status TEXT DEFAULT 'active',
+    subject_specialization TEXT,
+    vehicle_assigned TEXT,
+    can_login BOOLEAN DEFAULT false,
+    user_id INTEGER NULL REFERENCES users(id),
+    device_id TEXT,
+    is_synced BOOLEAN DEFAULT TRUE,
+    is_deleted INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS students (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

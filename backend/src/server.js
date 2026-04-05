@@ -9,6 +9,7 @@ const feeRoutes = require('./routes/feeRoutes');
 const timetableRoutes = require('./routes/timetableRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const parentRoutes = require('./routes/parentRoutes');
+const staffRoutes = require('./routes/staffRoutes');
 
 const app = express();
 app.use(cors());
@@ -27,6 +28,7 @@ app.use('/api/fees', feeRoutes);
 app.use('/api/timetable', timetableRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/parent', parentRoutes);
+app.use('/api/staff', staffRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

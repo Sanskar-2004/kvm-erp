@@ -6,12 +6,15 @@ exports.createTimetableEntry = async (req, res) => {
         const { id, class_id, subject_id, teacher_id, teacher_name, day_of_week, start_time, end_time, subject, period_number } = req.body;
 
         // CLASH DETECTION: Check if teacher is already booked at this time
+        // Excludes the current record (id) so editing an existing slot doesn't clash with itself
         const clash = await db.query(
             `SELECT id, class_id, subject FROM timetable 
              WHERE teacher_id = $1 AND day_of_week = $2 
-             AND start_time < $3 AND end_time > $4
+             AND period_number = $3
+             AND class_id != $4
+             AND id != $5
              AND is_deleted = 0`,
-            [teacher_id, day_of_week, end_time, start_time]
+            [teacher_id, day_of_week, period_number, class_id, id || '']
         );
 
         if (clash.rows.length > 0) {

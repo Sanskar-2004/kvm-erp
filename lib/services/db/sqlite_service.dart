@@ -252,6 +252,30 @@ class SQLiteService {
         created_at TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE staff (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        phone TEXT,
+        email TEXT,
+        role TEXT NOT NULL,
+        employee_code TEXT UNIQUE,
+        department TEXT,
+        joining_date TEXT,
+        salary REAL DEFAULT 0.0,
+        status TEXT DEFAULT 'active',
+        subject_specialization TEXT,
+        vehicle_assigned TEXT,
+        can_login INTEGER DEFAULT 0,
+        user_id INTEGER,
+        device_id TEXT NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -269,6 +293,32 @@ class SQLiteService {
           await db.execute('ALTER TABLE students ADD COLUMN $col');
         } catch (_) {} // Column may already exist
       }
+    }
+    
+    if (oldVersion < 3) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS staff (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          phone TEXT,
+          email TEXT,
+          role TEXT NOT NULL,
+          employee_code TEXT UNIQUE,
+          department TEXT,
+          joining_date TEXT,
+          salary REAL DEFAULT 0.0,
+          status TEXT DEFAULT 'active',
+          subject_specialization TEXT,
+          vehicle_assigned TEXT,
+          can_login INTEGER DEFAULT 0,
+          user_id INTEGER,
+          device_id TEXT NOT NULL,
+          is_synced INTEGER NOT NULL DEFAULT 0,
+          is_deleted INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
     }
   }
 

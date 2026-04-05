@@ -6,6 +6,7 @@ import '../../fees/screens/fees_screen.dart';
 import '../../timetable/screens/timetable_manager_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
+import '../../staff/screens/staff_screen.dart';
 import 'admin_finance_screen.dart';
 
 class AdminDashboard extends ConsumerWidget {
@@ -80,11 +81,17 @@ class AdminDashboard extends ConsumerWidget {
               mainAxisSpacing: 10,
               children: [
                 _ActionCard(
-                    title: 'Add Student',
-                    icon: Icons.person_add_rounded,
+                    title: 'Manage Students',
+                    icon: Icons.people_rounded,
                     color: Colors.blue,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const StudentsScreen()))),
+                _ActionCard(
+                    title: 'Manage Staff',
+                    icon: Icons.badge_rounded,
+                    color: Colors.indigo,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const StaffScreen()))),
                 _ActionCard(
                     title: 'Manage Fees',
                     icon: Icons.payment_rounded,
