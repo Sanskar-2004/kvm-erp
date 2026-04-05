@@ -54,35 +54,29 @@ exports.calculateClassRanks = async (req, res) => {
     try {
         const { classId, examType } = req.params;
 
-        // Calculate total marks per student for this exam type
+        // Proper RANK() OVER window function for tie-safe ranking
         const result = await db.query(`
-            SELECT m.student_id, s.name AS student_name,
-                   SUM(m.marks_obtained) AS total_obtained,
-                   SUM(m.total_marks) AS total_max,
-                   ROUND((SUM(m.marks_obtained)::NUMERIC / NULLIF(SUM(m.total_marks), 0)) * 100, 2) AS percentage
-            FROM marks m
-            JOIN students s ON s.id = m.student_id
-            WHERE s.class_id = $1 AND m.exam_type = $2 AND m.is_deleted = 0
-            GROUP BY m.student_id, s.name
-            ORDER BY percentage DESC
+            SELECT 
+                sub.student_id,
+                sub.student_name,
+                sub.total_obtained,
+                sub.total_max,
+                sub.percentage,
+                RANK() OVER (ORDER BY sub.percentage DESC) AS rank
+            FROM (
+                SELECT m.student_id, s.name AS student_name,
+                       SUM(m.marks_obtained) AS total_obtained,
+                       SUM(m.total_marks) AS total_max,
+                       ROUND((SUM(m.marks_obtained)::NUMERIC / NULLIF(SUM(m.total_marks), 0)) * 100, 2) AS percentage
+                FROM marks m
+                JOIN students s ON s.id = m.student_id
+                WHERE s.class_id = $1 AND m.exam_type = $2 AND m.is_deleted = 0
+                GROUP BY m.student_id, s.name
+            ) sub
+            ORDER BY sub.percentage DESC
         `, [classId, examType]);
 
-        // Assign ranks
-        const ranked = result.rows.map((row, index) => ({
-            ...row,
-            rank: index + 1
-        }));
-
-        // Update ranks in DB
-        for (const student of ranked) {
-            await db.query(
-                `UPDATE marks SET class_rank = $1, percentage = $2 
-                 WHERE student_id = $3 AND exam_type = $4`,
-                [student.rank, student.percentage, student.student_id, examType]
-            );
-        }
-
-        res.json({ status: 'success', rankings: ranked });
+        res.json({ status: 'success', rankings: result.rows });
     } catch (e) {
         console.error('[Rank Calculation Error]', e);
         res.status(500).json({ status: 'error', message: e.message });

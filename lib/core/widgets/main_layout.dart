@@ -11,8 +11,6 @@ import '../../features/attendance/screens/attendance_screen.dart';
 import '../../features/fees/screens/fees_screen.dart';
 import '../../features/sync/screens/conflict_logs_screen.dart';
 import '../../features/backup/screens/backup_screen.dart';
-import '../../features/timetable/screens/timetable_screen.dart';
-import '../../features/marks/screens/marks_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import 'sync_status_badge.dart';
 
@@ -54,15 +52,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
       case UserRole.teacher:
         screens = [
           const TeacherDashboard(),
-          const AttendanceScreen(),
-          const MarksScreen(),
-          const TimetableScreen(),
+          const StudentsScreen(),
         ];
         navItems = const [
           BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.fact_check_rounded), label: 'Attendance'),
-          BottomNavigationBarItem(icon: Icon(Icons.grading_rounded), label: 'Marks'),
-          BottomNavigationBarItem(icon: Icon(Icons.schedule_rounded), label: 'Timetable'),
+          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Students'),
         ];
         break;
 

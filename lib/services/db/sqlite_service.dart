@@ -178,6 +178,7 @@ class SQLiteService {
         device_id TEXT NOT NULL,
         is_synced INTEGER NOT NULL DEFAULT 0,
         is_deleted INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(student_id, subject, exam_type),
         FOREIGN KEY (student_id) REFERENCES students(id),
         FOREIGN KEY (class_id) REFERENCES classes(id)
       )
