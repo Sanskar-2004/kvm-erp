@@ -3,11 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/dashboard_repository.dart';
 import '../../students/screens/students_screen.dart';
 import '../../fees/screens/fees_screen.dart';
-import '../../timetable/screens/timetable_manager_screen.dart';
+import '../../academics/screens/academics_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
 import '../../staff/screens/staff_screen.dart';
-import '../../staff/screens/assign_staff_screen.dart';
 import 'admin_finance_screen.dart';
 
 class AdminDashboard extends ConsumerWidget {
@@ -94,23 +93,17 @@ class AdminDashboard extends ConsumerWidget {
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const StaffScreen()))),
                 _ActionCard(
-                    title: 'Assign Staff',
-                    icon: Icons.assignment_ind_rounded,
-                    color: Colors.deepOrange,
+                    title: 'Academics',
+                    icon: Icons.school_rounded,
+                    color: Colors.purple,
                     onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const AssignStaffScreen()))),
+                        MaterialPageRoute(builder: (_) => const AcademicsScreen()))),
                 _ActionCard(
                     title: 'Manage Fees',
                     icon: Icons.payment_rounded,
                     color: Colors.green,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const FeesScreen()))),
-                _ActionCard(
-                    title: 'Timetable',
-                    icon: Icons.schedule_rounded,
-                    color: Colors.purple,
-                    onTap: () => Navigator.push(context,
-                        MaterialPageRoute(builder: (_) => const TimetableManagerScreen()))),
                 _ActionCard(
                     title: 'Backup',
                     icon: Icons.backup_rounded,
