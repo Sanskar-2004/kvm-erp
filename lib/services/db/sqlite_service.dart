@@ -501,55 +501,76 @@ class SQLiteService {
   Future<Map<String, dynamic>> getFeeAnalytics() async {
     final db = await database;
 
-    final summary = await db.rawQuery('''
-      SELECT 
-        COALESCE(SUM(amount), 0) as expected,
-        COALESCE(SUM(paid_amount), 0) as collected,
-        COALESCE(SUM(due_amount), 0) as pending,
+    try {
+      final summary = await db.rawQuery('''
+        SELECT 
+          COALESCE(SUM(amount), 0) as expected,
+          COALESCE(SUM(paid_amount), 0) as collected,
+          COALESCE(SUM(due_amount), 0) as pending
+        FROM fees
+        WHERE is_deleted = 0
+      ''');
 
-        COUNT(DISTINCT CASE
-          WHEN status = 'PAID' OR due_amount <= 0 THEN student_id
-        END) as paid_students,
+      final paidCountRaw = await db.rawQuery('''
+        SELECT COUNT(DISTINCT student_id) as count
+        FROM fees 
+        WHERE is_deleted = 0 AND (status = 'PAID' OR due_amount <= 0)
+      ''');
 
-        COUNT(DISTINCT CASE
-          WHEN status != 'PAID' AND due_amount > 0 THEN student_id
-        END) as due_students
-      FROM fees
-      WHERE is_deleted = 0
-    ''');
+      final dueCountRaw = await db.rawQuery('''
+        SELECT COUNT(DISTINCT student_id) as count
+        FROM fees 
+        WHERE is_deleted = 0 AND status != 'PAID' AND due_amount > 0
+      ''');
 
-    final transactions = await db.rawQuery('''
-      SELECT f.id, f.paid_amount, f.paid_date, f.status, f.fee_type as month, f.transaction_id as payment_method, 
-             COALESCE(s.name, f.student_name) as display_student_name
-      FROM fees f
-      LEFT JOIN students s ON s.id = f.student_id
-      WHERE f.is_deleted = 0 AND f.paid_amount > 0
-      ORDER BY f.paid_date DESC
-      LIMIT 10
-    ''');
+      final expected = summary.isNotEmpty ? summary.first['expected'] : 0;
+      final collected = summary.isNotEmpty ? summary.first['collected'] : 0;
+      final pending = summary.isNotEmpty ? summary.first['pending'] : 0;
+      final paidStudents =
+          paidCountRaw.isNotEmpty ? paidCountRaw.first['count'] : 0;
+      final dueStudents =
+          dueCountRaw.isNotEmpty ? dueCountRaw.first['count'] : 0;
 
-    final dueStudentsList = await db.rawQuery('''
-      SELECT f.id, f.due_amount, f.due_date, f.student_id, 
-             COALESCE(s.name, f.student_name) as name, s.class_id, s.phone
-      FROM fees f
-      LEFT JOIN students s ON s.id = f.student_id
-      WHERE f.is_deleted = 0 AND f.due_amount > 0 AND f.status != 'PAID'
-      ORDER BY f.due_date ASC
-    ''');
+      final transactions = await db.rawQuery('''
+        SELECT f.id, f.paid_amount as amount_paid, f.due_amount as amount_due, f.paid_date, f.status, f.fee_type as month, f.transaction_id as payment_method, 
+               COALESCE(s.name, f.student_name) as student_name
+        FROM fees f
+        LEFT JOIN students s ON s.id = f.student_id
+        WHERE f.is_deleted = 0 AND f.paid_amount > 0
+        ORDER BY f.paid_date DESC
+        LIMIT 10
+      ''');
 
-    return {
-      ...(summary.isNotEmpty
-          ? summary.first
-          : {
-              "expected": 0,
-              "collected": 0,
-              "pending": 0,
-              "paid_students": 0,
-              "due_students": 0
-            }),
-      "transactions": transactions,
-      "due_students_list": dueStudentsList,
-    };
+      final dueStudentsList = await db.rawQuery('''
+        SELECT f.id, f.due_amount as total_due, f.due_date, f.student_id, 
+               COALESCE(s.name, f.student_name) as student_name, s.class_id, s.phone
+        FROM fees f
+        LEFT JOIN students s ON s.id = f.student_id
+        WHERE f.is_deleted = 0 AND f.due_amount > 0 AND f.status != 'PAID'
+        ORDER BY f.due_date ASC
+      ''');
+
+      return {
+        "expected": expected,
+        "collected": collected,
+        "pending": pending,
+        "paid_students": paidStudents,
+        "due_students": dueStudents,
+        "transactions": transactions,
+        "due_students_list": dueStudentsList,
+      };
+    } catch (e) {
+      print("SQLITE FEE ANALYTICS ERROR: \$e");
+      return {
+        "expected": 0,
+        "collected": 0,
+        "pending": 0,
+        "paid_students": 0,
+        "due_students": 0,
+        "transactions": [],
+        "due_students_list": []
+      };
+    }
   }
 
   Future<void> close() async {
