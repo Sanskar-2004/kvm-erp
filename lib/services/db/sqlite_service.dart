@@ -191,26 +191,21 @@ class SQLiteService {
     ''');
 
     await db.execute('''
-      CREATE TABLE fees (
+      CREATE TABLE student_fees (
         id TEXT PRIMARY KEY,
         student_id TEXT NOT NULL,
-        student_name TEXT NOT NULL,
-        class_id TEXT NOT NULL,
-        fee_type TEXT NOT NULL,
-        amount REAL NOT NULL,
-        paid_amount REAL NOT NULL,
-        due_amount REAL NOT NULL,
-        due_date TEXT NOT NULL,
+        academic_year TEXT NOT NULL,
+        month INTEGER NOT NULL,
+        amount_due REAL NOT NULL DEFAULT 0.0,
+        amount_paid REAL NOT NULL DEFAULT 0.0,
+        status TEXT NOT NULL DEFAULT 'UNPAID',
         paid_date TEXT,
-        status TEXT NOT NULL,
-        transaction_id TEXT,
-        remarks TEXT,
-        updated_at TEXT NOT NULL,
-        device_id TEXT NOT NULL,
+        device_id TEXT,
         is_synced INTEGER NOT NULL DEFAULT 0,
         is_deleted INTEGER NOT NULL DEFAULT 0,
-        FOREIGN KEY (student_id) REFERENCES students(id),
-        FOREIGN KEY (class_id) REFERENCES classes(id)
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (student_id) REFERENCES students(id)
       )
     ''');
 
@@ -375,6 +370,29 @@ class SQLiteService {
         )
       ''');
     }
+
+    if (oldVersion < 5) {
+      // Migrate structure safely
+      await db.execute('DROP TABLE IF EXISTS fees');
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS student_fees (
+          id TEXT PRIMARY KEY,
+          student_id TEXT NOT NULL,
+          academic_year TEXT NOT NULL,
+          month INTEGER NOT NULL,
+          amount_due REAL NOT NULL DEFAULT 0.0,
+          amount_paid REAL NOT NULL DEFAULT 0.0,
+          status TEXT NOT NULL DEFAULT 'UNPAID',
+          paid_date TEXT,
+          device_id TEXT,
+          is_synced INTEGER NOT NULL DEFAULT 0,
+          is_deleted INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL,
+          FOREIGN KEY (student_id) REFERENCES students(id)
+        )
+      ''');
+    }
   }
 
   // ── Generic CRUD Helpers ─────────────────────────────────────────────
@@ -449,8 +467,8 @@ class SQLiteService {
 
     // 2. Fees
     final feeRaw = await db.rawQuery('''
-      SELECT SUM(due_amount) as total_due, SUM(paid_amount) as total_paid
-      FROM fees
+      SELECT SUM(amount_due) as total_due, SUM(amount_paid) as total_paid
+      FROM student_fees
       WHERE student_id = ? AND is_deleted = 0
     ''', [studentId]);
 
@@ -504,23 +522,23 @@ class SQLiteService {
     try {
       final summary = await db.rawQuery('''
         SELECT 
-          COALESCE(SUM(amount), 0) as expected,
-          COALESCE(SUM(paid_amount), 0) as collected,
-          COALESCE(SUM(due_amount), 0) as pending
-        FROM fees
+          COALESCE(SUM(amount_due), 0) as expected,
+          COALESCE(SUM(amount_paid), 0) as collected,
+          COALESCE(SUM(amount_due - amount_paid), 0) as pending
+        FROM student_fees
         WHERE is_deleted = 0
       ''');
 
       final paidCountRaw = await db.rawQuery('''
         SELECT COUNT(DISTINCT student_id) as count
-        FROM fees 
-        WHERE is_deleted = 0 AND (status = 'PAID' OR due_amount <= 0)
+        FROM student_fees 
+        WHERE is_deleted = 0 AND (status = 'PAID' OR (amount_due - amount_paid) <= 0)
       ''');
 
       final dueCountRaw = await db.rawQuery('''
         SELECT COUNT(DISTINCT student_id) as count
-        FROM fees 
-        WHERE is_deleted = 0 AND status != 'PAID' AND due_amount > 0
+        FROM student_fees 
+        WHERE is_deleted = 0 AND status != 'PAID' AND (amount_due - amount_paid) > 0
       ''');
 
       final expected = summary.isNotEmpty ? summary.first['expected'] : 0;
@@ -532,22 +550,22 @@ class SQLiteService {
           dueCountRaw.isNotEmpty ? dueCountRaw.first['count'] : 0;
 
       final transactions = await db.rawQuery('''
-        SELECT f.id, f.paid_amount as amount_paid, f.due_amount as amount_due, f.paid_date, f.status, f.fee_type as month, f.transaction_id as payment_method, 
-               COALESCE(s.name, f.student_name) as student_name
-        FROM fees f
-        LEFT JOIN students s ON s.id = f.student_id
-        WHERE f.is_deleted = 0 AND f.paid_amount > 0
-        ORDER BY f.paid_date DESC
+        SELECT sf.id, sf.amount_paid, sf.amount_due, sf.paid_date, sf.status, sf.month, 'N/A' as payment_method, 
+               COALESCE(s.name, 'Unknown') as student_name
+        FROM student_fees sf
+        LEFT JOIN students s ON s.id = sf.student_id
+        WHERE sf.is_deleted = 0 AND sf.amount_paid > 0
+        ORDER BY sf.paid_date DESC
         LIMIT 10
       ''');
 
       final dueStudentsList = await db.rawQuery('''
-        SELECT f.id, f.due_amount as total_due, f.due_date, f.student_id, 
-               COALESCE(s.name, f.student_name) as student_name, s.class_id, s.phone
-        FROM fees f
-        LEFT JOIN students s ON s.id = f.student_id
-        WHERE f.is_deleted = 0 AND f.due_amount > 0 AND f.status != 'PAID'
-        ORDER BY f.due_date ASC
+        SELECT sf.id, sf.amount_due as total_due, sf.created_at, sf.student_id, 
+               COALESCE(s.name, 'Unknown') as student_name, s.class_id, s.phone
+        FROM student_fees sf
+        LEFT JOIN students s ON s.id = sf.student_id
+        WHERE sf.is_deleted = 0 AND sf.amount_due > 0 AND sf.status != 'PAID'
+        ORDER BY sf.created_at ASC
       ''');
 
       return {

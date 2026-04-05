@@ -45,7 +45,9 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
     if (session == null) return;
 
     try {
-      final finance = await ref.read(feeAnalyticsProvider.future);
+      // By using ref.refresh, we FORCE the provider to bypass cache and query SQLite again, 
+      // ensuring immediately fresh data after a sync occurs.
+      final finance = await ref.refresh(feeAnalyticsProvider.future);
 
       setState(() {
         _yearly = {

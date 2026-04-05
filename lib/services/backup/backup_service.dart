@@ -20,13 +20,13 @@ class BackupService {
 
      final students = await db.query('students');
      final attendance = await db.query('attendance');
-     final fees = await db.query('fees');
+     final studentFees = await db.query('student_fees');
 
      final data = {
        "export_date": DateTime.now().toIso8601String(),
        "students": students,
        "attendance": attendance,
-       "fees": fees,
+       "student_fees": studentFees,
      };
 
      final jsonPayload = jsonEncode(data);

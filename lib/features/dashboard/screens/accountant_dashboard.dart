@@ -120,8 +120,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
       final session = await ref.read(authRepositoryProvider).getSession();
       if (session == null) return;
 
-      // Local SQLite unified analytics provider
-      final finance = await ref.read(feeAnalyticsProvider.future);
+      // By using ref.refresh, we FORCE the provider to bypass cache and query SQLite again, 
+      // ensuring immediately fresh data after a sync occurs.
+      final finance = await ref.refresh(feeAnalyticsProvider.future);
 
       setState(() {
         _yearly = {
