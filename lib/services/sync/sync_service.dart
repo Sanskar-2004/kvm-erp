@@ -93,7 +93,12 @@ class SyncService {
       final table = job['table_name'].toString();
       if (!payload.containsKey(table)) payload[table] = [];
       try {
-        payload[table]!.add(jsonDecode(job['data'].toString()));
+        final Map<String, dynamic> data = jsonDecode(job['data'].toString());
+        // Self-heal UPDATE jobs lacking primary keys by forcing the SQLite record_id in
+        if (!data.containsKey('id') || data['id'] == null) {
+           data['id'] = job['record_id'].toString();
+        }
+        payload[table]!.add(data);
       } catch (e) {
         log('Corrupt sync job ignored: ${job['id']}');
         corruptedJobIds.add(int.parse(job['id'].toString()));
