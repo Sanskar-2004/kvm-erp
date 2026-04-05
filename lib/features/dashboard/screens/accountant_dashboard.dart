@@ -5,13 +5,15 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../fees/providers/fee_analytics_provider.dart';
 import 'student_fee_detail_screen.dart';
 
 class AccountantDashboard extends ConsumerStatefulWidget {
   const AccountantDashboard({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<AccountantDashboard> createState() => _AccountantDashboardState();
+  ConsumerState<AccountantDashboard> createState() =>
+      _AccountantDashboardState();
 }
 
 class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
@@ -35,8 +37,18 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   List<String> _classes = List<String>.from(ClassConstants.allClassesWithAll);
 
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
 
   @override
@@ -73,9 +85,10 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final students = List<Map<String, dynamic>>.from(data['data']['students'] ?? [])
-            .where((s) => s['is_deleted'] != 1)
-            .toList();
+        final students =
+            List<Map<String, dynamic>>.from(data['data']['students'] ?? [])
+                .where((s) => s['is_deleted'] != 1)
+                .toList();
 
         // Extract unique classes - handle both numeric and string class IDs
         final classSet = <String>{'All'};
@@ -107,34 +120,23 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
       final session = await ref.read(authRepositoryProvider).getSession();
       if (session == null) return;
 
-      // Load finance summary
-      final finResp = await http.get(
-        Uri.parse('$BASE_URL/admin/finance-summary'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      // Local SQLite unified analytics provider
+      final finance = await ref.read(feeAnalyticsProvider.future);
 
-      // Load due fees
-      final dueResp = await http.get(
-        Uri.parse('$BASE_URL/admin/due-fees'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      setState(() {
+        _yearly = {
+          'total_paid': finance['collected'],
+          'total_pending': finance['pending'],
+          'total_due': finance['expected']
+        };
+        _recentTransactions =
+            List<Map<String, dynamic>>.from(finance['transactions'] ?? []);
+        _unpaidStudentCount = finance['due_students'] ?? 0;
 
-      if (finResp.statusCode == 200) {
-        final finData = jsonDecode(finResp.body)['data'];
-        setState(() {
-          _yearly = finData['yearly'] ?? {};
-          _recentTransactions = List<Map<String, dynamic>>.from(finData['recentTransactions'] ?? []);
-          _unpaidStudentCount = finData['unpaidStudentCount'] ?? 0;
-        });
-      }
-
-      if (dueResp.statusCode == 200) {
-        final dueData = jsonDecode(dueResp.body);
-        setState(() {
-          _dueStudents = List<Map<String, dynamic>>.from(dueData['students'] ?? []);
-          _grandTotalDue = (dueData['grandTotal'] ?? 0).toDouble();
-        });
-      }
+        _dueStudents =
+            List<Map<String, dynamic>>.from(finance['due_students_list'] ?? []);
+        _grandTotalDue = _parseNum(finance['pending']);
+      });
     } catch (e) {
       debugPrint('Load fees overview error: $e');
     } finally {
@@ -145,14 +147,17 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   List<Map<String, dynamic>> get _filteredStudents {
     var list = _students;
     if (_selectedClass != 'All') {
-      list = list.where((s) => s['class_id']?.toString() == _selectedClass).toList();
+      list = list
+          .where((s) => s['class_id']?.toString() == _selectedClass)
+          .toList();
     }
     final query = _searchController.text.toLowerCase();
     if (query.isNotEmpty) {
-      list = list.where((s) =>
-        (s['name'] ?? '').toString().toLowerCase().contains(query) ||
-        (s['class_id'] ?? '').toString().toLowerCase().contains(query)
-      ).toList();
+      list = list
+          .where((s) =>
+              (s['name'] ?? '').toString().toLowerCase().contains(query) ||
+              (s['class_id'] ?? '').toString().toLowerCase().contains(query))
+          .toList();
     }
     return list;
   }
@@ -169,7 +174,8 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
       },
       body: jsonEncode({
         'user_id': studentId,
-        'message': 'Fee payment reminder: Your fee for $studentName is overdue. Please clear your dues at the earliest.',
+        'message':
+            'Fee payment reminder: Your fee for $studentName is overdue. Please clear your dues at the earliest.',
       }),
     );
 
@@ -199,10 +205,12 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
           ),
           child: TabBar(
             controller: _tabController,
-            indicator: BoxDecoration(color: Colors.teal, borderRadius: BorderRadius.circular(10)),
+            indicator: BoxDecoration(
+                color: Colors.teal, borderRadius: BorderRadius.circular(10)),
             labelColor: Colors.white,
             unselectedLabelColor: Colors.grey[600],
-            labelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            labelStyle:
+                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             dividerColor: Colors.transparent,
             tabs: const [
               Tab(text: '  Students  '),
@@ -243,7 +251,8 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 child: DropdownButton<String>(
                   value: _selectedClass,
                   isExpanded: true,
-                  icon: const Icon(Icons.filter_list_rounded, color: Colors.teal),
+                  icon:
+                      const Icon(Icons.filter_list_rounded, color: Colors.teal),
                   items: _classes.map((c) {
                     String label;
                     if (c == 'All') {
@@ -255,7 +264,8 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                     }
                     return DropdownMenuItem(
                       value: c,
-                      child: Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+                      child: Text(label,
+                          style: const TextStyle(fontWeight: FontWeight.w500)),
                     );
                   }).toList(),
                   onChanged: (v) => setState(() => _selectedClass = v ?? 'All'),
@@ -272,7 +282,8 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 prefixIcon: const Icon(Icons.search, size: 20),
                 isDense: true,
                 contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 filled: true,
                 fillColor: Colors.grey[50],
               ),
@@ -285,7 +296,10 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
           child: Align(
             alignment: Alignment.centerLeft,
             child: Text('${_filteredStudents.length} students',
-                style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500)),
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey[500],
+                    fontWeight: FontWeight.w500)),
           ),
         ),
         const SizedBox(height: 4),
@@ -297,9 +311,11 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.person_search, size: 56, color: Colors.grey[300]),
+                          Icon(Icons.person_search,
+                              size: 56, color: Colors.grey[300]),
                           const SizedBox(height: 8),
-                          Text('No students found', style: TextStyle(color: Colors.grey[500])),
+                          Text('No students found',
+                              style: TextStyle(color: Colors.grey[500])),
                         ],
                       ),
                     )
@@ -317,35 +333,50 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                               backgroundColor: Colors.teal.withOpacity(0.1),
                               child: Text(
                                 (student['name'] ?? 'S')[0].toUpperCase(),
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.teal, fontSize: 14),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.teal,
+                                    fontSize: 14),
                               ),
                             ),
                             title: Text(student['name'] ?? 'Unknown',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                            subtitle: Text('Class ${student['class_id'] ?? '-'}',
-                                style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
+                            subtitle: Text(
+                                'Class ${student['class_id'] ?? '-'}',
+                                style: TextStyle(
+                                    fontSize: 12, color: Colors.grey[500])),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
-                                  icon: Icon(Icons.notifications_active_rounded, color: Colors.orange[600], size: 20),
+                                  icon: Icon(Icons.notifications_active_rounded,
+                                      color: Colors.orange[600], size: 20),
                                   tooltip: 'Alert Parent',
                                   onPressed: () => _sendAlert(
-                                    student['id'] ?? '', student['name'] ?? 'Student',
+                                    student['id'] ?? '',
+                                    student['name'] ?? 'Student',
                                   ),
                                   visualDensity: VisualDensity.compact,
                                   padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                  constraints: const BoxConstraints(
+                                      minWidth: 32, minHeight: 32),
                                 ),
-                                const Icon(Icons.chevron_right_rounded, color: Colors.teal, size: 20),
+                                const Icon(Icons.chevron_right_rounded,
+                                    color: Colors.teal, size: 20),
                               ],
                             ),
-                            onTap: () => Navigator.push(context,
-                              MaterialPageRoute(builder: (_) => StudentFeeDetailScreen(
-                                studentId: student['id'] ?? '',
-                                studentName: student['name'] ?? 'Unknown',
-                                classId: student['class_id']?.toString() ?? '-',
-                              )),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => StudentFeeDetailScreen(
+                                        studentId: student['id'] ?? '',
+                                        studentName:
+                                            student['name'] ?? 'Unknown',
+                                        classId:
+                                            student['class_id']?.toString() ??
+                                                '-',
+                                      )),
                             ),
                           ),
                         );
@@ -361,7 +392,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     final totalExpected = _parseNum(_yearly['total_due']);
     final totalCollected = _parseNum(_yearly['total_paid']);
     final totalPending = _parseNum(_yearly['total_pending']);
-    final progress = totalExpected > 0 ? (totalCollected / totalExpected).clamp(0.0, 1.0) : 0.0;
+    final progress = totalExpected > 0
+        ? (totalCollected / totalExpected).clamp(0.0, 1.0)
+        : 0.0;
     final paidStudents = _students.length - _unpaidStudentCount;
 
     return _isFeesLoading
@@ -376,21 +409,48 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 children: [
                   // ── Summary Cards ──
                   Row(children: [
-                    Expanded(child: _statCard('Expected', '₹${totalExpected.toStringAsFixed(0)}', Icons.account_balance_rounded, Colors.blue)),
+                    Expanded(
+                        child: _statCard(
+                            'Expected',
+                            '₹${totalExpected.toStringAsFixed(0)}',
+                            Icons.account_balance_rounded,
+                            Colors.blue)),
                     const SizedBox(width: 10),
-                    Expanded(child: _statCard('Collected', '₹${totalCollected.toStringAsFixed(0)}', Icons.trending_up_rounded, Colors.green)),
+                    Expanded(
+                        child: _statCard(
+                            'Collected',
+                            '₹${totalCollected.toStringAsFixed(0)}',
+                            Icons.trending_up_rounded,
+                            Colors.green)),
                   ]),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: _statCard('Pending', '₹${totalPending.toStringAsFixed(0)}', Icons.trending_down_rounded, Colors.red)),
+                    Expanded(
+                        child: _statCard(
+                            'Pending',
+                            '₹${totalPending.toStringAsFixed(0)}',
+                            Icons.trending_down_rounded,
+                            Colors.red)),
                     const SizedBox(width: 10),
-                    Expanded(child: _statCard('Due Students', '$_unpaidStudentCount', Icons.person_off_rounded, Colors.orange)),
+                    Expanded(
+                        child: _statCard('Due Students', '$_unpaidStudentCount',
+                            Icons.person_off_rounded, Colors.orange)),
                   ]),
                   const SizedBox(height: 10),
                   Row(children: [
-                    Expanded(child: _statCard('Paid Students', '${paidStudents > 0 ? paidStudents : 0}', Icons.check_circle_rounded, Colors.teal)),
+                    Expanded(
+                        child: _statCard(
+                            'Paid Students',
+                            '${paidStudents > 0 ? paidStudents : 0}',
+                            Icons.check_circle_rounded,
+                            Colors.teal)),
                     const SizedBox(width: 10),
-                    Expanded(child: _statCard('Total Students', '${_students.length}', Icons.people_rounded, Colors.indigo)),
+                    Expanded(
+                        child: _statCard(
+                            'Total Students',
+                            '${_students.length}',
+                            Icons.people_rounded,
+                            Colors.indigo)),
                   ]),
                   const SizedBox(height: 16),
 
@@ -408,9 +468,13 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Collection Progress', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                            const Text('Collection Progress',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 14)),
                             Text('${(progress * 100).toStringAsFixed(1)}%',
-                                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700])),
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue[700])),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -421,7 +485,11 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                             minHeight: 10,
                             backgroundColor: Colors.grey[200],
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              progress > 0.7 ? Colors.green : progress > 0.4 ? Colors.orange : Colors.red,
+                              progress > 0.7
+                                  ? Colors.green
+                                  : progress > 0.4
+                                      ? Colors.orange
+                                      : Colors.red,
                             ),
                           ),
                         ),
@@ -432,7 +500,10 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
                   // ── Last 10 Transactions ──
                   Text('Last 10 Transactions',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 12),
 
                   if (_recentTransactions.isEmpty)
@@ -440,9 +511,11 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                       padding: const EdgeInsets.all(32),
                       alignment: Alignment.center,
                       child: Column(children: [
-                        Icon(Icons.receipt_long_rounded, size: 48, color: Colors.grey[300]),
+                        Icon(Icons.receipt_long_rounded,
+                            size: 48, color: Colors.grey[300]),
                         const SizedBox(height: 8),
-                        Text('No transactions yet', style: TextStyle(color: Colors.grey[500])),
+                        Text('No transactions yet',
+                            style: TextStyle(color: Colors.grey[500])),
                       ]),
                     )
                   else
@@ -451,14 +524,19 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                       final amount = _parseNum(txn['amount_paid']);
                       final totalDue = _parseNum(txn['amount_due']);
                       final remaining = totalDue - amount;
-                      final month = txn['month'] is int ? txn['month'] as int : 0;
+                      final month =
+                          txn['month'] is int ? txn['month'] as int : 0;
                       final method = txn['payment_method']?.toString() ?? 'N/A';
-                      final paidDate = txn['paid_date']?.toString().split('T').first ?? '';
+                      final paidDate =
+                          txn['paid_date']?.toString().split('T').first ?? '';
 
-                      final methodIcon = method == 'UPI' ? Icons.phone_android_rounded
-                          : method == 'Cheque' ? Icons.description_rounded
-                          : method == 'Bank Transfer' ? Icons.account_balance_rounded
-                          : Icons.money_rounded;
+                      final methodIcon = method == 'UPI'
+                          ? Icons.phone_android_rounded
+                          : method == 'Cheque'
+                              ? Icons.description_rounded
+                              : method == 'Bank Transfer'
+                                  ? Icons.account_balance_rounded
+                                  : Icons.money_rounded;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -466,43 +544,71 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                          border:
+                              Border.all(color: Colors.grey.withOpacity(0.1)),
                         ),
                         child: Row(children: [
                           CircleAvatar(
                             radius: 16,
                             backgroundColor: Colors.green.withOpacity(0.1),
                             child: Text('${index + 1}',
-                                style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                                style: const TextStyle(
+                                    color: Colors.green,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12)),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                              Text(txn['student_name']?.toString() ?? 'Unknown',
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                              const SizedBox(height: 2),
-                              Row(children: [
-                                Icon(methodIcon, size: 13, color: Colors.grey[400]),
-                                const SizedBox(width: 4),
-                                Text(method, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                                if (month > 0 && month <= 12) ...[
-                                  const SizedBox(width: 6),
-                                  Text('• ${_monthNames[month - 1]}', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                                ],
-                                if (paidDate.isNotEmpty) ...[
-                                  const SizedBox(width: 6),
-                                  Text('• $paidDate', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
-                                ],
-                              ]),
-                            ]),
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                      txn['student_name']?.toString() ??
+                                          'Unknown',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 14)),
+                                  const SizedBox(height: 2),
+                                  Row(children: [
+                                    Icon(methodIcon,
+                                        size: 13, color: Colors.grey[400]),
+                                    const SizedBox(width: 4),
+                                    Text(method,
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[500])),
+                                    if (month > 0 && month <= 12) ...[
+                                      const SizedBox(width: 6),
+                                      Text('• ${_monthNames[month - 1]}',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[500])),
+                                    ],
+                                    if (paidDate.isNotEmpty) ...[
+                                      const SizedBox(width: 6),
+                                      Text('• $paidDate',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey[400])),
+                                    ],
+                                  ]),
+                                ]),
                           ),
-                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                            Text('₹${amount.toStringAsFixed(0)}',
-                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15)),
-                            if (remaining > 0)
-                              Text('Left: ₹${remaining.toStringAsFixed(0)}',
-                                  style: TextStyle(fontSize: 10, color: Colors.red[400], fontWeight: FontWeight.w500)),
-                          ]),
+                          Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('₹${amount.toStringAsFixed(0)}',
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green,
+                                        fontSize: 15)),
+                                if (remaining > 0)
+                                  Text('Left: ₹${remaining.toStringAsFixed(0)}',
+                                      style: TextStyle(
+                                          fontSize: 10,
+                                          color: Colors.red[400],
+                                          fontWeight: FontWeight.w500)),
+                              ]),
                         ]),
                       );
                     }),
@@ -514,14 +620,23 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text('Students with Dues',
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600)),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.red.withOpacity(0.1), borderRadius: BorderRadius.circular(12),
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text('₹${_grandTotalDue.toStringAsFixed(0)} total',
-                              style: TextStyle(color: Colors.red[700], fontSize: 11, fontWeight: FontWeight.w600)),
+                          child: Text(
+                              '₹${_grandTotalDue.toStringAsFixed(0)} total',
+                              style: TextStyle(
+                                  color: Colors.red[700],
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600)),
                         ),
                       ],
                     ),
@@ -536,24 +651,36 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                           decoration: BoxDecoration(
                             color: Colors.red.withOpacity(0.03),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.red.withOpacity(0.1)),
+                            border:
+                                Border.all(color: Colors.red.withOpacity(0.1)),
                           ),
                           child: ListTile(
                             dense: true,
                             leading: CircleAvatar(
                               radius: 16,
                               backgroundColor: Colors.red.withOpacity(0.1),
-                              child: Text((student['student_name'] ?? 'S')[0].toUpperCase(),
-                                  style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+                              child: Text(
+                                  (student['student_name'] ?? 'S')[0]
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13)),
                             ),
                             title: Text(student['student_name'] ?? 'Unknown',
-                                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                            subtitle: Text('Class ${student['class_id'] ?? '-'} • Due: ₹${due.toStringAsFixed(0)}',
-                                style: TextStyle(fontSize: 11, color: Colors.red[400])),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600, fontSize: 13)),
+                            subtitle: Text(
+                                'Class ${student['class_id'] ?? '-'} • Due: ₹${due.toStringAsFixed(0)}',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.red[400])),
                             trailing: IconButton(
-                              icon: Icon(Icons.notifications_active_rounded, color: Colors.orange[700], size: 20),
+                              icon: Icon(Icons.notifications_active_rounded,
+                                  color: Colors.orange[700], size: 20),
                               tooltip: 'Send Alert',
-                              onPressed: () => _sendAlert(student['student_id'] ?? '', student['student_name'] ?? 'Student'),
+                              onPressed: () => _sendAlert(
+                                  student['student_id'] ?? '',
+                                  student['student_name'] ?? 'Student'),
                             ),
                           ),
                         );
@@ -583,7 +710,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
           const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+            child: Text(value,
+                style: TextStyle(
+                    color: color, fontSize: 18, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

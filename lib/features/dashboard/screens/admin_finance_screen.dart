@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../fees/providers/fee_analytics_provider.dart';
 
 class AdminFinanceScreen extends ConsumerStatefulWidget {
   const AdminFinanceScreen({Key? key}) : super(key: key);
@@ -19,8 +20,18 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
   bool _isLoading = true;
 
   static const _monthNames = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec'
   ];
 
   @override
@@ -34,20 +45,19 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
     if (session == null) return;
 
     try {
-      final response = await http.get(
-        Uri.parse('$BASE_URL/admin/finance-summary'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      final finance = await ref.read(feeAnalyticsProvider.future);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body)['data'];
-        setState(() {
-          _yearly = data['yearly'] ?? {};
-          _recentTransactions = List<Map<String, dynamic>>.from(data['recentTransactions'] ?? []);
-          _unpaidCount = data['unpaidStudentCount'] ?? 0;
-          _isLoading = false;
-        });
-      }
+      setState(() {
+        _yearly = {
+          'total_paid': finance['collected'],
+          'total_pending': finance['pending'],
+          'total_due': finance['expected']
+        };
+        _recentTransactions =
+            List<Map<String, dynamic>>.from(finance['transactions'] ?? []);
+        _unpaidCount = finance['due_students'] ?? 0;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() => _isLoading = false);
       debugPrint('Finance load error: $e');
@@ -60,7 +70,8 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
       appBar: AppBar(
         title: const Text('Financial Overview'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadFinanceData),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadFinanceData),
         ],
       ),
       body: _isLoading
@@ -76,14 +87,16 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                     // ── Yearly Totals Cards ──
                     Row(
                       children: [
-                        Expanded(child: _totalCard(
+                        Expanded(
+                            child: _totalCard(
                           'Total Collected',
                           '₹${_parseNum(_yearly['total_paid']).toStringAsFixed(0)}',
                           Icons.trending_up_rounded,
                           Colors.green,
                         )),
                         const SizedBox(width: 12),
-                        Expanded(child: _totalCard(
+                        Expanded(
+                            child: _totalCard(
                           'Total Pending',
                           '₹${_parseNum(_yearly['total_pending']).toStringAsFixed(0)}',
                           Icons.trending_down_rounded,
@@ -94,14 +107,16 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        Expanded(child: _totalCard(
+                        Expanded(
+                            child: _totalCard(
                           'Total Expected',
                           '₹${_parseNum(_yearly['total_due']).toStringAsFixed(0)}',
                           Icons.account_balance_rounded,
                           Colors.blue,
                         )),
                         const SizedBox(width: 12),
-                        Expanded(child: _totalCard(
+                        Expanded(
+                            child: _totalCard(
                           'Unpaid Students',
                           '$_unpaidCount',
                           Icons.person_off_rounded,
@@ -117,7 +132,9 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
 
                     // ── Recent Transactions ──
                     Text('Recent 10 Transactions',
-                        style: Theme.of(context).textTheme.titleMedium
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 12),
 
@@ -127,9 +144,11 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                         alignment: Alignment.center,
                         child: Column(
                           children: [
-                            Icon(Icons.receipt_long_rounded, size: 48, color: Colors.grey[300]),
+                            Icon(Icons.receipt_long_rounded,
+                                size: 48, color: Colors.grey[300]),
                             const SizedBox(height: 8),
-                            Text('No transactions yet', style: TextStyle(color: Colors.grey[500])),
+                            Text('No transactions yet',
+                                style: TextStyle(color: Colors.grey[500])),
                           ],
                         ),
                       )
@@ -137,8 +156,10 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                       ...List.generate(_recentTransactions.length, (index) {
                         final txn = _recentTransactions[index];
                         final amount = _parseNum(txn['amount_paid']);
-                        final month = txn['month'] is int ? txn['month'] as int : 0;
-                        final method = txn['payment_method']?.toString() ?? 'N/A';
+                        final month =
+                            txn['month'] is int ? txn['month'] as int : 0;
+                        final method =
+                            txn['payment_method']?.toString() ?? 'N/A';
                         final status = txn['status']?.toString() ?? 'PAID';
 
                         final methodIcon = method == 'UPI'
@@ -155,7 +176,8 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                           decoration: BoxDecoration(
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                            border:
+                                Border.all(color: Colors.grey.withOpacity(0.1)),
                           ),
                           child: Row(
                             children: [
@@ -164,7 +186,10 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                                 radius: 16,
                                 backgroundColor: Colors.green.withOpacity(0.1),
                                 child: Text('${index + 1}',
-                                    style: const TextStyle(color: Colors.green, fontWeight: FontWeight.bold, fontSize: 12)),
+                                    style: const TextStyle(
+                                        color: Colors.green,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12)),
                               ),
                               const SizedBox(width: 12),
 
@@ -173,18 +198,28 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(txn['student_name']?.toString() ?? 'Unknown',
-                                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                                    Text(
+                                        txn['student_name']?.toString() ??
+                                            'Unknown',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14)),
                                     const SizedBox(height: 2),
                                     Row(
                                       children: [
-                                        Icon(methodIcon, size: 13, color: Colors.grey[400]),
+                                        Icon(methodIcon,
+                                            size: 13, color: Colors.grey[400]),
                                         const SizedBox(width: 4),
-                                        Text(method, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                        Text(method,
+                                            style: TextStyle(
+                                                fontSize: 11,
+                                                color: Colors.grey[500])),
                                         const SizedBox(width: 8),
                                         if (month > 0 && month <= 12)
                                           Text('• ${_monthNames[month - 1]}',
-                                              style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Colors.grey[500])),
                                       ],
                                     ),
                                   ],
@@ -196,14 +231,22 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('₹${amount.toStringAsFixed(0)}',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 15)),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green,
+                                          fontSize: 15)),
                                   Chip(
-                                    label: Text(status, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold)),
-                                    backgroundColor: Colors.green.withOpacity(0.1),
+                                    label: Text(status,
+                                        style: const TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold)),
+                                    backgroundColor:
+                                        Colors.green.withOpacity(0.1),
                                     side: BorderSide.none,
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
-                                    labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                                    labelPadding: const EdgeInsets.symmetric(
+                                        horizontal: 6),
                                   ),
                                 ],
                               ),
@@ -233,7 +276,9 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
           const SizedBox(height: 8),
           Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 11)),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontSize: 20, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -242,7 +287,8 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
   Widget _buildProgressBar() {
     final totalDue = _parseNum(_yearly['total_due']);
     final totalPaid = _parseNum(_yearly['total_paid']);
-    final progress = totalDue > 0 ? (totalPaid / totalDue).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        totalDue > 0 ? (totalPaid / totalDue).clamp(0.0, 1.0) : 0.0;
     final percent = (progress * 100).toStringAsFixed(1);
 
     return Container(
@@ -258,8 +304,11 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Collection Progress', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-              Text('$percent%', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[700])),
+              const Text('Collection Progress',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+              Text('$percent%',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold, color: Colors.blue[700])),
             ],
           ),
           const SizedBox(height: 10),
@@ -270,7 +319,11 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
               minHeight: 10,
               backgroundColor: Colors.grey[200],
               valueColor: AlwaysStoppedAnimation<Color>(
-                progress > 0.7 ? Colors.green : progress > 0.4 ? Colors.orange : Colors.red,
+                progress > 0.7
+                    ? Colors.green
+                    : progress > 0.4
+                        ? Colors.orange
+                        : Colors.red,
               ),
             ),
           ),
