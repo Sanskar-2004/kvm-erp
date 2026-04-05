@@ -1,6 +1,6 @@
 class AppConstants {
   static const String dbName = 'kvm_erp.db';
-  static const int dbVersion = 3;
+  static const int dbVersion = 4;
 }
 
 // Connects directly to production Node.js Sync Engine hosted on Render.com

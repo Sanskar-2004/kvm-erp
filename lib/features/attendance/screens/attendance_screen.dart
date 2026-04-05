@@ -8,6 +8,7 @@ import '../../students/repositories/student_repository.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../staff/repositories/assignment_repository.dart';
 
 class AttendanceScreen extends ConsumerStatefulWidget {
   const AttendanceScreen({Key? key}) : super(key: key);
@@ -51,40 +52,50 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('$BASE_URL/timetable/teacher/${session.userId}'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final timetable = List<Map<String, dynamic>>.from(data['timetable'] ?? []);
-
-        // Extract unique class IDs from timetable
-        final classSet = <String>{};
-        for (final entry in timetable) {
-          final classId = entry['class_id']?.toString();
-          if (classId != null && classId.isNotEmpty) classSet.add(classId);
-        }
-
-        final sorted = classSet.toList()
-          ..sort((a, b) {
-            final aNum = int.tryParse(a);
-            final bNum = int.tryParse(b);
-            if (aNum != null && bNum != null) return aNum.compareTo(bNum);
-            return a.compareTo(b);
-          });
-
-        setState(() {
-          _assignedClasses = sorted;
-          if (sorted.isNotEmpty) _selectedClass = sorted.first;
-          _isLoadingClasses = false;
-        });
-      } else {
-        setState(() => _isLoadingClasses = false);
+      // Phase 3 Architecture: Read exact assignments
+      // But we need the staff_id. We only have user_id in auth.
+      // Actually /api/assignments?staff_id= wants staff_id.
+      // Fallback to fetch assignments where user_id matches via custom endpoint?
+      // For now, let's query the assignments API directly using /assignments?user_id= session.userId if backend supports it.
+      // Wait, getAssignments doesn't support user_id yet. Let's send a request and let backend handle it, or we fetch the staff row first.
+      
+      // Let's use custom logic: GET /api/staff then find my id?
+      final staffRes = await http.get(Uri.parse('$BASE_URL/staff'), headers: {'Authorization': 'Bearer ${session.token}'});
+      String? myStaffId;
+      if (staffRes.statusCode == 200) {
+         final sList = jsonDecode(staffRes.body)['staff'] as List;
+         final me = sList.firstWhere((s) => s['user_id']?.toString() == session.userId, orElse: () => null);
+         if (me != null) myStaffId = me['id'];
       }
-    } catch (e) {
-      debugPrint('Load assigned classes error: $e');
+
+      if (myStaffId == null) {
+         setState(() => _isLoadingClasses = false);
+         return;
+      }
+
+      final assigns = await ref.read(assignmentRepositoryProvider).getAssignmentsByStaff(myStaffId);
+      final classSet = <String>{};
+      for (final a in assigns) {
+        if (a.isClassTeacher) {
+          classSet.add(a.classId); // Grant full rights only to class teachers, or any assigned teacher
+        }
+        // If we want any assigned teacher to take attendance, do classSet.add(a.classId) unconditionally
+        classSet.add(a.classId);
+      }
+
+      final sorted = classSet.toList()..sort((a, b) {
+        final aNum = int.tryParse(a);
+        final bNum = int.tryParse(b);
+        if (aNum != null && bNum != null) return aNum.compareTo(bNum);
+        return a.compareTo(b);
+      });
+
+      setState(() {
+        _assignedClasses = sorted;
+        if (sorted.isNotEmpty) _selectedClass = sorted.first;
+        _isLoadingClasses = false;
+      });
+    } catch (_) {
       setState(() => _isLoadingClasses = false);
     }
   }

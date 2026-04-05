@@ -10,6 +10,7 @@ const timetableRoutes = require('./routes/timetableRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const parentRoutes = require('./routes/parentRoutes');
 const staffRoutes = require('./routes/staffRoutes');
+const assignmentRoutes = require('./routes/assignmentRoutes');
 
 const app = express();
 app.use(cors());
@@ -29,6 +30,7 @@ app.use('/api/timetable', timetableRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/parent', parentRoutes);
 app.use('/api/staff', staffRoutes);
+app.use('/api/assignments', assignmentRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

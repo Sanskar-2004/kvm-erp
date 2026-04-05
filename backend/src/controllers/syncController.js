@@ -2,7 +2,7 @@ const db = require('../config/db');
 
 // Explicitly Whitelisted tables strictly preventing SQL execution vulnerabilities
 const ALLOWED_TABLES = [
-    'users', 'students', 'staff', 'attendance', 'marks', 'fees', 'notices', 'timetable', 'classes',
+    'users', 'students', 'staff', 'staff_assignments', 'attendance', 'marks', 'fees', 'notices', 'timetable', 'classes',
     'student_fees', 'alerts', 'subjects', 'parent_student_map', 'fee_structure'
 ];
 

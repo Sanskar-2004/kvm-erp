@@ -92,6 +92,22 @@ CREATE TABLE IF NOT EXISTS fees (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS staff_assignments (
+    id TEXT PRIMARY KEY,
+    staff_id TEXT NOT NULL REFERENCES staff(id),
+    class_id TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    academic_year TEXT NOT NULL DEFAULT '2026-27',
+    max_periods_per_day INTEGER DEFAULT 6,
+    max_periods_per_week INTEGER DEFAULT 30,
+    is_class_teacher BOOLEAN DEFAULT false,
+    device_id TEXT,
+    is_synced BOOLEAN DEFAULT TRUE,
+    is_deleted INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS sync_logs (
     id SERIAL PRIMARY KEY,
     table_name TEXT NOT NULL,

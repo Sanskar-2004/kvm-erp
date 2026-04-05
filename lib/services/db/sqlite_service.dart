@@ -276,6 +276,24 @@ class SQLiteService {
         updated_at TEXT NOT NULL
       )
     ''');
+
+    await db.execute('''
+      CREATE TABLE staff_assignments (
+        id TEXT PRIMARY KEY,
+        staff_id TEXT NOT NULL,
+        class_id TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        academic_year TEXT NOT NULL DEFAULT '2026-27',
+        max_periods_per_day INTEGER DEFAULT 6,
+        max_periods_per_week INTEGER DEFAULT 30,
+        is_class_teacher INTEGER DEFAULT 0,
+        device_id TEXT NOT NULL,
+        is_synced INTEGER NOT NULL DEFAULT 0,
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -312,6 +330,26 @@ class SQLiteService {
           vehicle_assigned TEXT,
           can_login INTEGER DEFAULT 0,
           user_id INTEGER,
+          device_id TEXT NOT NULL,
+          is_synced INTEGER NOT NULL DEFAULT 0,
+          is_deleted INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS staff_assignments (
+          id TEXT PRIMARY KEY,
+          staff_id TEXT NOT NULL,
+          class_id TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          academic_year TEXT NOT NULL DEFAULT '2026-27',
+          max_periods_per_day INTEGER DEFAULT 6,
+          max_periods_per_week INTEGER DEFAULT 30,
+          is_class_teacher INTEGER DEFAULT 0,
           device_id TEXT NOT NULL,
           is_synced INTEGER NOT NULL DEFAULT 0,
           is_deleted INTEGER NOT NULL DEFAULT 0,

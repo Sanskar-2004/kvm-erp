@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../staff/repositories/assignment_repository.dart';
+import '../../../models/staff_assignment_model.dart';
 
 /// Admin Timetable Manager — Week grid with clash detection
 class TimetableManagerScreen extends ConsumerStatefulWidget {
@@ -41,6 +43,7 @@ class _TimetableManagerState extends ConsumerState<TimetableManagerScreen>
 
   String _selectedClass = '10';
   List<Map<String, dynamic>> _entries = [];
+  List<StaffAssignmentModel> _classAssignments = [];
   bool _isLoading = false;
   late TabController _tabController;
 
@@ -72,10 +75,18 @@ class _TimetableManagerState extends ConsumerState<TimetableManagerScreen>
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() => _entries = List<Map<String, dynamic>>.from(data['timetable'] ?? []));
+        _entries = List<Map<String, dynamic>>.from(data['timetable'] ?? []);
+      }
+
+      // Load assigned staff for the dropdown options
+      try {
+        final assigns = await ref.read(assignmentRepositoryProvider).getAssignmentsByClass(_selectedClass);
+        _classAssignments = assigns;
+      } catch (_) {
+        _classAssignments = [];
       }
     } catch (e) {
-      debugPrint('Timetable load error: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
     } finally {
       setState(() => _isLoading = false);
     }
@@ -472,9 +483,10 @@ class _TimetableManagerState extends ConsumerState<TimetableManagerScreen>
 
   // ── Add / Assign Dialog ──
   void _showAddDialog(String day, Map<String, dynamic> period) {
-    final subjectCtrl = TextEditingController();
-    final teacherIdCtrl = TextEditingController();
-    final teacherNameCtrl = TextEditingController();
+    StaffAssignmentModel? selectedAssignment;
+    if (_classAssignments.isNotEmpty) {
+      selectedAssignment = _classAssignments.first;
+    }
 
     showDialog(
       context: context,
@@ -505,50 +517,45 @@ class _TimetableManagerState extends ConsumerState<TimetableManagerScreen>
                 style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.normal)),
           ],
         ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              TextField(
-                controller: subjectCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  labelText: 'Subject',
-                  hintText: 'e.g. Mathematics',
-                  prefixIcon: const Icon(Icons.book_rounded, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
+        content: StatefulBuilder(
+          builder: (context, setDialogState) {
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 8),
+                  if (_classAssignments.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)),
+                      child: const Text('No staff assigned to this class yet. Go to Dashboard > Assign Staff.',
+                          style: TextStyle(color: Colors.red)),
+                    )
+                  else ...[
+                    const Text('Select Assigned Staff', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<StaffAssignmentModel>(
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.person_rounded, size: 20),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        filled: true,
+                        fillColor: Colors.grey[50],
+                      ),
+                      value: selectedAssignment,
+                      items: _classAssignments.map((a) {
+                        return DropdownMenuItem(
+                          value: a,
+                          child: Text('${a.staffName} — ${a.subject}'),
+                        );
+                      }).toList(),
+                      onChanged: (v) => setDialogState(() => selectedAssignment = v),
+                    ),
+                  ]
+                ],
               ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: teacherIdCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Teacher ID',
-                  hintText: 'e.g. 5',
-                  prefixIcon: const Icon(Icons.badge_rounded, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: teacherNameCtrl,
-                textCapitalization: TextCapitalization.words,
-                decoration: InputDecoration(
-                  labelText: 'Teacher Name',
-                  hintText: 'e.g. Mr. Kumar',
-                  prefixIcon: const Icon(Icons.person_rounded, size: 20),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  filled: true,
-                  fillColor: Colors.grey[50],
-                ),
-              ),
-            ],
-          ),
+            );
+          }
         ),
         actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
         actions: [
@@ -569,7 +576,9 @@ class _TimetableManagerState extends ConsumerState<TimetableManagerScreen>
             Expanded(
               flex: 2,
               child: ElevatedButton.icon(
-                onPressed: () => _createEntry(ctx, day, period, subjectCtrl.text, teacherIdCtrl.text, teacherNameCtrl.text),
+                onPressed: _classAssignments.isEmpty || selectedAssignment == null
+                    ? null
+                    : () => _createEntry(ctx, day, period, selectedAssignment!.subject, selectedAssignment!.staffId, selectedAssignment!.staffName ?? ''),
                 icon: const Icon(Icons.check_rounded, size: 18),
                 label: const Text('Assign', style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(

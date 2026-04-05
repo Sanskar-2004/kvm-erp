@@ -7,6 +7,7 @@ import '../../timetable/screens/timetable_manager_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
 import '../../staff/screens/staff_screen.dart';
+import '../../staff/screens/assign_staff_screen.dart';
 import 'admin_finance_screen.dart';
 
 class AdminDashboard extends ConsumerWidget {
@@ -92,6 +93,12 @@ class AdminDashboard extends ConsumerWidget {
                     color: Colors.indigo,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const StaffScreen()))),
+                _ActionCard(
+                    title: 'Assign Staff',
+                    icon: Icons.assignment_ind_rounded,
+                    color: Colors.deepOrange,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const AssignStaffScreen()))),
                 _ActionCard(
                     title: 'Manage Fees',
                     icon: Icons.payment_rounded,
