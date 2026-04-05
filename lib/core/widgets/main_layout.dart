@@ -9,6 +9,8 @@ import '../../features/dashboard/screens/accountant_dashboard.dart';
 import '../../features/students/screens/students_screen.dart';
 import '../../features/attendance/screens/attendance_screen.dart';
 import '../../features/fees/screens/fees_screen.dart';
+import '../../features/fees/screens/student_fee_screen.dart';
+import '../../features/fees/screens/parent_fee_screen.dart';
 import '../../features/sync/screens/conflict_logs_screen.dart';
 import '../../features/backup/screens/backup_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
@@ -41,11 +43,16 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           const ConflictLogsScreen(),
         ];
         navItems = const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Students'),
-          BottomNavigationBarItem(icon: Icon(Icons.fact_check_rounded), label: 'Attendance'),
-          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
-          BottomNavigationBarItem(icon: Icon(Icons.admin_panel_settings_rounded), label: 'Audit'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.people_rounded), label: 'Students'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.fact_check_rounded), label: 'Attendance'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.payments_rounded), label: 'Fees'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.admin_panel_settings_rounded), label: 'Audit'),
         ];
         break;
 
@@ -55,30 +62,36 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           const StudentsScreen(),
         ];
         navItems = const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_rounded), label: 'Students'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.people_rounded), label: 'Students'),
         ];
         break;
 
       case UserRole.parent:
         screens = [
           const ParentDashboard(),
-          const FeesScreen(),
+          const ParentFeeScreen(),
         ];
         navItems = const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded), label: 'Home'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
 
       case UserRole.student:
         screens = [
           const StudentDashboard(),
-          const FeesScreen(),
+          const StudentFeeScreen(),
         ];
         navItems = const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded), label: 'Home'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
 
@@ -88,8 +101,10 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           const FeesScreen(),
         ];
         navItems = const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.payments_rounded), label: 'Fees'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.payments_rounded), label: 'Fees'),
         ];
         break;
     }
@@ -156,9 +171,11 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
             icon: CircleAvatar(
               radius: 16,
               backgroundColor: roleBadgeColor.withOpacity(0.15),
-              child: Icon(Icons.person_rounded, size: 18, color: roleBadgeColor),
+              child:
+                  Icon(Icons.person_rounded, size: 18, color: roleBadgeColor),
             ),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             offset: const Offset(0, 45),
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -168,7 +185,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                   children: [
                     Text(
                       '${role.name[0].toUpperCase()}${role.name.substring(1)} Account',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, color: Colors.black87),
                     ),
                     Text(
                       'Logged in as ${role.name}',
@@ -182,7 +200,8 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout_rounded, size: 18, color: Colors.red[400]),
+                    Icon(Icons.logout_rounded,
+                        size: 18, color: Colors.red[400]),
                     const SizedBox(width: 8),
                     Text('Logout', style: TextStyle(color: Colors.red[400])),
                   ],
