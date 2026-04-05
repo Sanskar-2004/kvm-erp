@@ -45,7 +45,8 @@ class SQLiteService {
         UNIQUE(class_name, section, stream)
       )
     ''');
-    await db.execute('CREATE INDEX idx_classes_name_section ON classes(class_name, section)');
+    await db.execute(
+        'CREATE INDEX idx_classes_name_section ON classes(class_name, section)');
 
     await db.execute('''
       CREATE TABLE periods (
@@ -59,7 +60,8 @@ class SQLiteService {
         is_deleted INTEGER NOT NULL DEFAULT 0
       )
     ''');
-    await db.execute('CREATE INDEX idx_periods_number ON periods(period_number)');
+    await db
+        .execute('CREATE INDEX idx_periods_number ON periods(period_number)');
 
     // ── Entity Tables ──────────────────────────────────────────────────
 
@@ -116,7 +118,8 @@ class SQLiteService {
         FOREIGN KEY (class_id) REFERENCES classes(id)
       )
     ''');
-    await db.execute('CREATE INDEX idx_students_class_id ON students(class_id)');
+    await db
+        .execute('CREATE INDEX idx_students_class_id ON students(class_id)');
 
     // Implemented UNIQUE attendance constraint to fix write protection bug!
     await db.execute('''
@@ -139,9 +142,12 @@ class SQLiteService {
         FOREIGN KEY (period_number) REFERENCES periods(period_number)
       )
     ''');
-    await db.execute('CREATE INDEX idx_attendance_student_date ON attendance(student_id, date)');
-    await db.execute('CREATE INDEX idx_attendance_class_date ON attendance(class_id, date)');
-    await db.execute('CREATE INDEX idx_attendance_period ON attendance(period_number)');
+    await db.execute(
+        'CREATE INDEX idx_attendance_student_date ON attendance(student_id, date)');
+    await db.execute(
+        'CREATE INDEX idx_attendance_class_date ON attendance(class_id, date)');
+    await db.execute(
+        'CREATE INDEX idx_attendance_period ON attendance(period_number)');
 
     await db.execute('''
       CREATE TABLE timetable (
@@ -301,10 +307,20 @@ class SQLiteService {
     if (oldVersion < 2) {
       // Add new student columns
       final newCols = [
-        'parent_occupation TEXT', 'mother_name TEXT', 'mother_phone TEXT',
-        'caste TEXT', 'category TEXT', 'religion TEXT', 'nationality TEXT',
-        'blood_group TEXT', 'city TEXT', 'state TEXT', 'pincode TEXT',
-        'previous_school TEXT', 'previous_class TEXT', 'aadhar_number TEXT',
+        'parent_occupation TEXT',
+        'mother_name TEXT',
+        'mother_phone TEXT',
+        'caste TEXT',
+        'category TEXT',
+        'religion TEXT',
+        'nationality TEXT',
+        'blood_group TEXT',
+        'city TEXT',
+        'state TEXT',
+        'pincode TEXT',
+        'previous_school TEXT',
+        'previous_class TEXT',
+        'aadhar_number TEXT',
         'status TEXT DEFAULT \'approved\'',
       ];
       for (final col in newCols) {
@@ -313,7 +329,7 @@ class SQLiteService {
         } catch (_) {} // Column may already exist
       }
     }
-    
+
     if (oldVersion < 3) {
       await db.execute('''
         CREATE TABLE IF NOT EXISTS staff (
@@ -407,9 +423,79 @@ class SQLiteService {
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
-  Future<void> transaction(Future<void> Function(Transaction txn) action) async {
+  Future<void> transaction(
+      Future<void> Function(Transaction txn) action) async {
     final db = await database;
     await db.transaction(action);
+  }
+
+  Future<Map<String, dynamic>> getStudentSummary(String studentId) async {
+    final db = await database;
+
+    // 1. Attendance
+    final attRaw = await db.rawQuery('''
+      SELECT COUNT(*) as total, SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present 
+      FROM attendance 
+      WHERE student_id = ? AND is_deleted = 0
+    ''', [studentId]);
+
+    final attTotal =
+        int.tryParse(attRaw.first['total']?.toString() ?? '0') ?? 0;
+    final attPresent =
+        int.tryParse(attRaw.first['present']?.toString() ?? '0') ?? 0;
+    final attPct = attTotal > 0
+        ? ((attPresent / attTotal) * 100).toStringAsFixed(1)
+        : '0.0';
+
+    // 2. Fees
+    final feeRaw = await db.rawQuery('''
+      SELECT SUM(due_amount) as total_due, SUM(paid_amount) as total_paid
+      FROM fees
+      WHERE student_id = ? AND is_deleted = 0
+    ''', [studentId]);
+
+    final totalDue =
+        double.tryParse(feeRaw.first['total_due']?.toString() ?? '0') ?? 0;
+    final totalPaid =
+        double.tryParse(feeRaw.first['total_paid']?.toString() ?? '0') ?? 0;
+
+    // 3. Marks
+    final marksRaw = await db.rawQuery('''
+      SELECT subject, marks_obtained, total_marks, exam_type
+      FROM marks 
+      WHERE student_id = ? AND is_deleted = 0
+      ORDER BY exam_date DESC LIMIT 10
+    ''', [studentId]);
+
+    // 4. Alerts/Notices
+    final alertsRaw = await db.rawQuery('''
+      SELECT id, title as message, is_important as is_read, posted_at as created_at
+      FROM notices
+      WHERE is_deleted = 0
+      ORDER BY posted_at DESC LIMIT 5
+    ''');
+
+    return {
+      'attendance': {
+        'total': attTotal,
+        'present': attPresent,
+        'percentage': attPct
+      },
+      'fees': {'total_due': totalDue, 'total_paid': totalPaid},
+      'marks': marksRaw,
+      'alerts': alertsRaw,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getStudentFeeTransactions(
+      String studentId) async {
+    final db = await database;
+    return await db.rawQuery('''
+      SELECT fee_type as month, paid_amount as amount_paid, paid_date, status, transaction_id as payment_method
+      FROM fees
+      WHERE student_id = ? AND is_deleted = 0
+      ORDER BY due_date DESC LIMIT 20
+    ''', [studentId]);
   }
 
   Future<void> close() async {

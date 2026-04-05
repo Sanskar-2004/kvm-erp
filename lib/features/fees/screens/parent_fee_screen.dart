@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../../services/db/sqlite_service.dart';
 
 /// Parent fee screen — shows expandable fee cards for each child
 class ParentFeeScreen extends ConsumerStatefulWidget {
@@ -35,51 +36,42 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
 
     try {
       // 1. Get children list
+      // Normally from parent_student_map or remote. If we rely on pure local DB, we can just grab from DB or remote fallback.
+      // Parents might not have `parent_student_map` locally since it's phase 2, let's keep the remote fetch for the children list if needed
+      // BUT for Demo/robustness, we'll fetch from remote if possible, then local for fees.
       final childResp = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
         headers: {'Authorization': 'Bearer ${session.token}'},
       );
 
+      List<Map<String, dynamic>> children = [];
       if (childResp.statusCode == 200) {
         final data = jsonDecode(childResp.body);
-        final children =
-            List<Map<String, dynamic>>.from(data['children'] ?? []);
-        setState(() => _children = children);
+        children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+      }
 
-        // 2. Fetch fee summary for each child
-        for (final child in children) {
-          final childId = child['id']?.toString() ?? '';
-          if (childId.isEmpty) continue;
-
-          try {
-            final summaryResp = await http.get(
-              Uri.parse('$BASE_URL/parent/student-summary/$childId'),
-              headers: {'Authorization': 'Bearer ${session.token}'},
-            );
-            if (summaryResp.statusCode == 200) {
-              final sData = jsonDecode(summaryResp.body)['data'] ?? {};
-              setState(() {
-                _childFees[childId] = sData['fees'] ?? {};
-              });
-            }
-          } catch (_) {}
+      // If no children linked remotely, simulate with local demo student
+      if (children.isEmpty) {
+        final db = SQLiteService();
+        final localStudents = await db.query('students', limit: 1);
+        if (localStudents.isNotEmpty) {
+          children = [localStudents.first];
         }
+      }
 
-        // If no children linked, try to find demo student
-        if (children.isEmpty) {
-          final pullResp = await http.get(
-            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
-            headers: {'Authorization': 'Bearer ${session.token}'},
-          );
-          if (pullResp.statusCode == 200) {
-            final pullData = jsonDecode(pullResp.body);
-            final students = List<Map<String, dynamic>>.from(
-                pullData['data']['students'] ?? []);
-            if (students.isNotEmpty) {
-              setState(() => _children = [students.first]);
-            }
-          }
-        }
+      setState(() => _children = children);
+
+      // 2. Fetch fee summary for each child from LOCAL SQLite
+      for (final child in children) {
+        final childId = child['id']?.toString() ?? '';
+        if (childId.isEmpty) continue;
+
+        try {
+          final sData = await SQLiteService().getStudentSummary(childId);
+          setState(() {
+            _childFees[childId] = sData['fees'] ?? {};
+          });
+        } catch (_) {}
       }
 
       setState(() => _isLoading = false);

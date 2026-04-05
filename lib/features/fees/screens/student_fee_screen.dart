@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../../services/db/sqlite_service.dart';
 
 /// Student-only fee screen — shows ONLY the logged-in student's fee data
 class StudentFeeScreen extends ConsumerStatefulWidget {
@@ -34,34 +35,23 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
     }
 
     try {
-      final resp = await http.get(
-        Uri.parse('$BASE_URL/parent/student-summary/${session.userId}'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      final summary = await SQLiteService().getStudentSummary(session.userId);
+      final txns =
+          await SQLiteService().getStudentFeeTransactions(session.userId);
 
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(resp.body)['data'] ?? {};
-        setState(() {
-          _fees = data['fees'] ?? {};
-          _studentName = data['student_name']?.toString() ?? 'Student';
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
+      // Student name can be pulled from local db if needed, or we just leave it contextually
+      final db = SQLiteService();
+      final studentCheck = await db.query('students',
+          where: 'id = ?', whereArgs: [session.userId], limit: 1);
+      if (studentCheck.isNotEmpty) {
+        _studentName = studentCheck.first['name']?.toString() ?? 'Student';
       }
 
-      // Load transaction history
-      final txnResp = await http.get(
-        Uri.parse('$BASE_URL/fees/student/${session.userId}'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
-      if (txnResp.statusCode == 200) {
-        final txnData = jsonDecode(txnResp.body);
-        setState(() {
-          _transactions =
-              List<Map<String, dynamic>>.from(txnData['fees'] ?? []);
-        });
-      }
+      setState(() {
+        _fees = summary['fees'] ?? {};
+        _transactions = txns;
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('Load fees error: $e');
       setState(() => _isLoading = false);

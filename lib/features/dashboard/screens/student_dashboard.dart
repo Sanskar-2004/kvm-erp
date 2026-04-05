@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
+import '../../../services/db/sqlite_service.dart';
 
 class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({Key? key}) : super(key: key);
@@ -41,7 +42,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
       if (pullResp.statusCode == 200) {
         final pullData = jsonDecode(pullResp.body);
-        final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+        final students =
+            List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
 
         // Find student matching the logged-in userId
         final match = students.where((s) => s['id'] == session.userId).toList();
@@ -53,22 +55,14 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
         }
       }
 
-      // Fetch summary (attendance, fees, marks, alerts) using the student-summary API
+      // Fetch summary (attendance, fees, marks, alerts) from LOCAL SQLite
       final studentId = _student['id']?.toString() ?? session.userId;
-      final summaryResp = await http.get(
-        Uri.parse('$BASE_URL/parent/student-summary/$studentId'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      final localSummary = await SQLiteService().getStudentSummary(studentId);
 
-      if (summaryResp.statusCode == 200) {
-        final summaryData = jsonDecode(summaryResp.body);
-        setState(() {
-          _summary = summaryData['data'] ?? {};
-          _isLoading = false;
-        });
-      } else {
-        setState(() => _isLoading = false);
-      }
+      setState(() {
+        _summary = localSummary;
+        _isLoading = false;
+      });
     } catch (e) {
       debugPrint('Load student data error: $e');
       setState(() => _isLoading = false);
@@ -88,9 +82,13 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
             children: [
               // Header
               Text('My Dashboard',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineSmall
+                      ?.copyWith(fontWeight: FontWeight.bold)),
               const SizedBox(height: 4),
-              Text('Pull down to refresh', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+              Text('Pull down to refresh',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12)),
               const SizedBox(height: 12),
 
               // ── Student Profile Card ──
@@ -183,22 +181,33 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
               radius: 28,
               backgroundColor: Colors.white24,
               child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 24)),
             ),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                  Text(name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 18)),
                   const SizedBox(height: 4),
                   Text('Class $classId  •  Roll: $rollNumber',
-                      style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 2),
                   Row(children: [
-                    Icon(Icons.person_outline_rounded, size: 13, color: Colors.white60),
+                    Icon(Icons.person_outline_rounded,
+                        size: 13, color: Colors.white60),
                     const SizedBox(width: 4),
-                    Text('$gender  •  $phone', style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                    Text('$gender  •  $phone',
+                        style: const TextStyle(
+                            color: Colors.white60, fontSize: 11)),
                   ]),
                 ],
               ),
@@ -206,7 +215,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
             Column(children: [
               Icon(Icons.info_outline_rounded, color: Colors.white60, size: 20),
               const SizedBox(height: 4),
-              Text('Profile', style: TextStyle(color: Colors.white60, fontSize: 9)),
+              Text('Profile',
+                  style: TextStyle(color: Colors.white60, fontSize: 9)),
             ]),
           ],
         ),
@@ -232,13 +242,16 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     final city = _student['city']?.toString() ?? '';
     final state = _student['state']?.toString() ?? '';
     final pincode = _student['pincode']?.toString() ?? '';
-    final fullAddress = [address, city, state, pincode].where((s) => s.isNotEmpty && s != '-').join(', ');
+    final fullAddress = [address, city, state, pincode]
+        .where((s) => s.isNotEmpty && s != '-')
+        .join(', ');
     final category = _student['category']?.toString() ?? '-';
     final religion = _student['religion']?.toString() ?? '-';
     final nationality = _student['nationality']?.toString() ?? '-';
     final bloodGroup = _student['blood_group']?.toString() ?? '-';
     final aadhar = _student['aadhar_number']?.toString() ?? '-';
-    final admissionDate = _student['admission_date']?.toString().split('T').first ?? '-';
+    final admissionDate =
+        _student['admission_date']?.toString().split('T').first ?? '-';
     final previousSchool = _student['previous_school']?.toString() ?? '-';
     final previousClass = _student['previous_class']?.toString() ?? '-';
 
@@ -265,11 +278,17 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
                     radius: 36,
                     backgroundColor: Colors.purple.withOpacity(0.12),
                     child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'S',
-                        style: TextStyle(color: Colors.purple[700], fontWeight: FontWeight.bold, fontSize: 28)),
+                        style: TextStyle(
+                            color: Colors.purple[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 28)),
                   ),
                   const SizedBox(height: 10),
-                  Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                  Text('Class $classId  •  Roll: $rollNumber', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                  Text(name,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('Class $classId  •  Roll: $rollNumber',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                 ]),
               ),
               const SizedBox(height: 20),
@@ -299,7 +318,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
               const SizedBox(height: 16),
               _sectionHeader('Address'),
-              _infoRow('Full Address', fullAddress.isNotEmpty ? fullAddress : '-'),
+              _infoRow(
+                  'Full Address', fullAddress.isNotEmpty ? fullAddress : '-'),
 
               const SizedBox(height: 16),
               _sectionHeader('Education'),
@@ -319,9 +339,17 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
-        Container(width: 3, height: 16, decoration: BoxDecoration(color: Colors.purple, borderRadius: BorderRadius.circular(2))),
+        Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+                color: Colors.purple, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 8),
-        Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.purple[700])),
+        Text(title,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.purple[700])),
       ]),
     );
   }
@@ -332,9 +360,14 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 130, child: Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13))),
-          Expanded(child: Text(value.isEmpty || value == 'null' ? '-' : value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
+          SizedBox(
+              width: 130,
+              child: Text(label,
+                  style: TextStyle(color: Colors.grey[500], fontSize: 13))),
+          Expanded(
+              child: Text(value.isEmpty || value == 'null' ? '-' : value,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w500, fontSize: 13))),
         ],
       ),
     );
@@ -342,7 +375,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
   // ── Summary Helpers ──
   String _getAttendanceStatus() {
-    final pct = double.tryParse(_summary['attendance']?['percentage']?.toString() ?? '0') ?? 0;
+    final pct = double.tryParse(
+            _summary['attendance']?['percentage']?.toString() ?? '0') ??
+        0;
     if (pct >= 90) return 'Excellent';
     if (pct >= 75) return 'Good';
     if (pct >= 50) return 'Needs Improvement';
@@ -350,22 +385,31 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   }
 
   String _getFeeSummary() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     final remaining = due - paid;
     if (remaining <= 0) return 'All Clear';
     return '₹${remaining.toStringAsFixed(0)} Due';
   }
 
   Color _getFeeColor() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     return (due - paid) > 0 ? Colors.red : Colors.green;
   }
 
   String _getFeeStatus() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     return (due - paid) > 0 ? 'Overdue' : 'Paid';
   }
 
@@ -392,22 +436,27 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     final att = _summary['attendance'] ?? {};
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Attendance Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Attendance Summary',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
             _detailStat('Total', '${att['total'] ?? 0}', Colors.blue),
             _detailStat('Present', '${att['present'] ?? 0}', Colors.green),
-            _detailStat('Absent', '${(att['total'] ?? 0) - (att['present'] ?? 0)}', Colors.red),
+            _detailStat('Absent',
+                '${(att['total'] ?? 0) - (att['present'] ?? 0)}', Colors.red),
           ]),
           const SizedBox(height: 20),
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
-              value: (double.tryParse(att['percentage']?.toString() ?? '0') ?? 0) / 100,
+              value:
+                  (double.tryParse(att['percentage']?.toString() ?? '0') ?? 0) /
+                      100,
               minHeight: 12,
               backgroundColor: Colors.grey[200],
               valueColor: const AlwaysStoppedAnimation(Colors.green),
@@ -415,7 +464,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
           ),
           const SizedBox(height: 8),
           Text('${att['percentage'] ?? 0}% Attendance Rate',
-              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[600])),
+              style: TextStyle(
+                  fontWeight: FontWeight.w600, color: Colors.grey[600])),
         ]),
       ),
     );
@@ -428,16 +478,19 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
     showModalBottomSheet(
       context: context,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Text('Fee Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          const Text('Fee Summary',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 20),
           Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
             _detailStat('Total Due', '₹${due.toStringAsFixed(0)}', Colors.blue),
             _detailStat('Paid', '₹${paid.toStringAsFixed(0)}', Colors.green),
-            _detailStat('Remaining', '₹${(due - paid).toStringAsFixed(0)}', Colors.red),
+            _detailStat(
+                'Remaining', '₹${(due - paid).toStringAsFixed(0)}', Colors.red),
           ]),
           const SizedBox(height: 20),
           ClipRRect(
@@ -446,7 +499,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
               value: due > 0 ? (paid / due).clamp(0, 1) : 0,
               minHeight: 12,
               backgroundColor: Colors.grey[200],
-              valueColor: AlwaysStoppedAnimation(paid >= due ? Colors.green : Colors.orange),
+              valueColor: AlwaysStoppedAnimation(
+                  paid >= due ? Colors.green : Colors.orange),
             ),
           ),
         ]),
@@ -459,7 +513,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.6,
         maxChildSize: 0.85,
@@ -467,20 +522,28 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
         builder: (ctx, scrollCtrl) => Padding(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            const Text('Report Card', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Report Card',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Expanded(
               child: marks.isEmpty
-                  ? Center(child: Text('No results yet', style: TextStyle(color: Colors.grey[400])))
+                  ? Center(
+                      child: Text('No results yet',
+                          style: TextStyle(color: Colors.grey[400])))
                   : ListView.builder(
                       controller: scrollCtrl,
                       itemCount: marks.length,
                       itemBuilder: (ctx, i) {
                         final m = marks[i];
-                        final obtained = double.tryParse(m['marks_obtained']?.toString() ?? '0') ?? 0;
-                        final total = double.tryParse(m['total_marks']?.toString() ?? '100') ?? 100;
+                        final obtained = double.tryParse(
+                                m['marks_obtained']?.toString() ?? '0') ??
+                            0;
+                        final total = double.tryParse(
+                                m['total_marks']?.toString() ?? '100') ??
+                            100;
                         final pct = total > 0 ? (obtained / total) * 100 : 0;
-                        final grade = AcademicUtils.generateGrade(pct.toDouble());
+                        final grade =
+                            AcademicUtils.generateGrade(pct.toDouble());
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 8),
@@ -488,23 +551,38 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
                           decoration: BoxDecoration(
                             color: Colors.blue.withOpacity(0.04),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.blue.withOpacity(0.12)),
+                            border: Border.all(
+                                color: Colors.blue.withOpacity(0.12)),
                           ),
                           child: Row(children: [
                             Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(m['subject']?.toString() ?? 'Subject',
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                Text('${m['exam_type'] ?? ''} • Rank: ${m['class_rank'] ?? '-'}',
-                                    style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-                              ]),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(m['subject']?.toString() ?? 'Subject',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14)),
+                                    Text(
+                                        '${m['exam_type'] ?? ''} • Rank: ${m['class_rank'] ?? '-'}',
+                                        style: TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.grey[500])),
+                                  ]),
                             ),
-                            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                              Text('${obtained.toStringAsFixed(0)}/${total.toStringAsFixed(0)}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold)),
-                              Text('Grade: $grade',
-                                  style: TextStyle(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.w600)),
-                            ]),
+                            Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                      '${obtained.toStringAsFixed(0)}/${total.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold)),
+                                  Text('Grade: $grade',
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.blue[700],
+                                          fontWeight: FontWeight.w600)),
+                                ]),
                           ]),
                         );
                       },
@@ -521,7 +599,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.5,
         maxChildSize: 0.8,
@@ -529,11 +608,14 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
         builder: (ctx, scrollCtrl) => Padding(
           padding: const EdgeInsets.all(20),
           child: Column(children: [
-            const Text('Notices & Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Notices & Alerts',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Expanded(
               child: alerts.isEmpty
-                  ? Center(child: Text('No alerts', style: TextStyle(color: Colors.grey[400])))
+                  ? Center(
+                      child: Text('No alerts',
+                          style: TextStyle(color: Colors.grey[400])))
                   : ListView.builder(
                       controller: scrollCtrl,
                       itemCount: alerts.length,
@@ -545,22 +627,39 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: isRead ? Colors.grey.withOpacity(0.04) : Colors.orange.withOpacity(0.06),
+                            color: isRead
+                                ? Colors.grey.withOpacity(0.04)
+                                : Colors.orange.withOpacity(0.06),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: isRead ? Colors.grey.withOpacity(0.1) : Colors.orange.withOpacity(0.2)),
+                            border: Border.all(
+                                color: isRead
+                                    ? Colors.grey.withOpacity(0.1)
+                                    : Colors.orange.withOpacity(0.2)),
                           ),
                           child: Row(children: [
-                            Icon(isRead ? Icons.check_circle_outline : Icons.notifications_active_rounded,
-                                color: isRead ? Colors.grey : Colors.orange, size: 20),
+                            Icon(
+                                isRead
+                                    ? Icons.check_circle_outline
+                                    : Icons.notifications_active_rounded,
+                                color: isRead ? Colors.grey : Colors.orange,
+                                size: 20),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                                Text(alert['message']?.toString() ?? '',
-                                    style: TextStyle(fontSize: 13, fontWeight: isRead ? FontWeight.normal : FontWeight.w600)),
-                                const SizedBox(height: 4),
-                                Text(alert['created_at']?.toString() ?? '',
-                                    style: TextStyle(fontSize: 10, color: Colors.grey[400])),
-                              ]),
+                              child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(alert['message']?.toString() ?? '',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: isRead
+                                                ? FontWeight.normal
+                                                : FontWeight.w600)),
+                                    const SizedBox(height: 4),
+                                    Text(alert['created_at']?.toString() ?? '',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey[400])),
+                                  ]),
                             ),
                           ]),
                         );
@@ -575,7 +674,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
   Widget _detailStat(String label, String value, Color color) {
     return Column(children: [
-      Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20)),
+      Text(value,
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.bold, fontSize: 20)),
       const SizedBox(height: 4),
       Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
     ]);
@@ -590,8 +691,12 @@ class _InteractiveTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _InteractiveTile({
-    required this.title, required this.value, required this.status,
-    required this.icon, required this.color, required this.onTap,
+    required this.title,
+    required this.value,
+    required this.status,
+    required this.icon,
+    required this.color,
+    required this.onTap,
   });
 
   @override
@@ -609,25 +714,34 @@ class _InteractiveTile extends StatelessWidget {
         child: Row(children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+                color: color.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12)),
             child: Icon(icon, color: color, size: 26),
           ),
           const SizedBox(width: 14),
           Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(title,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12)),
               const SizedBox(height: 3),
-              Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(value,
+                  style: TextStyle(
+                      color: color, fontSize: 18, fontWeight: FontWeight.bold)),
             ]),
           ),
           Column(children: [
             Chip(
-              label: Text(status, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+              label: Text(status,
+                  style: TextStyle(
+                      color: color, fontSize: 9, fontWeight: FontWeight.bold)),
               backgroundColor: color.withOpacity(0.1),
               side: BorderSide.none,
               visualDensity: VisualDensity.compact,
             ),
-            Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.4), size: 20),
+            Icon(Icons.chevron_right_rounded,
+                color: color.withOpacity(0.4), size: 20),
           ]),
         ]),
       ),

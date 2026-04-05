@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
+import '../../../services/db/sqlite_service.dart';
 
 class ParentDashboard extends ConsumerStatefulWidget {
   const ParentDashboard({Key? key}) : super(key: key);
@@ -41,7 +42,8 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+        final children =
+            List<Map<String, dynamic>>.from(data['children'] ?? []);
         setState(() => _children = children);
         if (children.isNotEmpty) {
           _loadStudentSummary(children[0]['id']);
@@ -53,12 +55,13 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           );
           if (pullResp.statusCode == 200) {
             final pullData = jsonDecode(pullResp.body);
-            final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
-            
+            final students = List<Map<String, dynamic>>.from(
+                pullData['data']['students'] ?? []);
+
             // Provide a static demo student if DB is completely empty
-            final demoStudent = students.isNotEmpty 
-                ? students.first 
-                : { 'id': 'demo123', 'name': 'Demo Student', 'class_id': '10' };
+            final demoStudent = students.isNotEmpty
+                ? students.first
+                : {'id': 'demo123', 'name': 'Demo Student', 'class_id': '10'};
 
             setState(() {
               _children = [
@@ -69,7 +72,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                 }
               ];
             });
-            
+
             if (students.isNotEmpty) {
               _loadStudentSummary(demoStudent['id']);
             } else {
@@ -95,16 +98,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     if (session == null) return;
 
     try {
-      // Fetch summary
-      final response = await http.get(
-        Uri.parse('$BASE_URL/parent/student-summary/$studentId'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() => _summary = data['data'] ?? {});
-      }
+      // Fetch summary from LOCAL SQLite
+      final localSummary = await SQLiteService().getStudentSummary(studentId);
+      setState(() => _summary = localSummary);
 
       // Fetch full student details from sync/pull
       final pullResp = await http.get(
@@ -114,13 +110,16 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
 
       if (pullResp.statusCode == 200) {
         final pullData = jsonDecode(pullResp.body);
-        final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+        final students =
+            List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
         final match = students.where((s) => s['id'] == studentId).toList();
         if (match.isNotEmpty) {
           setState(() => _studentDetails = match.first);
         } else {
           // Use basic info from _children
-          final child = _children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{};
+          final child = _children.isNotEmpty
+              ? _children[_selectedChildIndex]
+              : <String, dynamic>{};
           setState(() => _studentDetails = Map<String, dynamic>.from(child));
         }
       }
@@ -147,11 +146,14 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                 _children.isNotEmpty
                     ? '${_children[_selectedChildIndex]['name'] ?? 'My Child'}\'s Dashboard'
                     : "My Child's Dashboard",
-                style: Theme.of(context).textTheme.headlineSmall
+                style: Theme.of(context)
+                    .textTheme
+                    .headlineSmall
                     ?.copyWith(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 4),
-              Text('Pull down to refresh', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+              Text('Pull down to refresh',
+                  style: TextStyle(color: Colors.grey[400], fontSize: 12)),
               const SizedBox(height: 12),
 
               // ── Sibling Toggle ──
@@ -174,23 +176,31 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
                           margin: const EdgeInsets.only(right: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? Colors.green : Colors.green.withOpacity(0.08),
+                            color: isSelected
+                                ? Colors.green
+                                : Colors.green.withOpacity(0.08),
                             borderRadius: BorderRadius.circular(22),
-                            border: Border.all(color: Colors.green.withOpacity(0.3)),
+                            border: Border.all(
+                                color: Colors.green.withOpacity(0.3)),
                           ),
                           child: Row(
                             children: [
-                              Icon(Icons.child_care_rounded, size: 18,
-                                  color: isSelected ? Colors.white : Colors.green),
+                              Icon(Icons.child_care_rounded,
+                                  size: 18,
+                                  color:
+                                      isSelected ? Colors.white : Colors.green),
                               const SizedBox(width: 6),
                               Text(
                                 child['name'] ?? 'Child ${index + 1}',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
                                   fontSize: 13,
-                                  color: isSelected ? Colors.white : Colors.green[700],
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.green[700],
                                 ),
                               ),
                             ],
@@ -202,8 +212,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                 ),
 
               // ── Child Profile Card ──
-              if (!_isLoading && _children.isNotEmpty)
-                _buildChildProfileCard(),
+              if (!_isLoading && _children.isNotEmpty) _buildChildProfileCard(),
 
               if (!_isLoading && _children.isNotEmpty)
                 const SizedBox(height: 14),
@@ -267,7 +276,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
 
   // ── Helpers ──
   String _getAttendanceStatus() {
-    final pct = double.tryParse(_summary['attendance']?['percentage']?.toString() ?? '0') ?? 0;
+    final pct = double.tryParse(
+            _summary['attendance']?['percentage']?.toString() ?? '0') ??
+        0;
     if (pct >= 90) return 'Excellent';
     if (pct >= 75) return 'Good';
     if (pct >= 50) return 'Needs Improvement';
@@ -275,22 +286,31 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   }
 
   String _getFeeSummary() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     final remaining = due - paid;
     if (remaining <= 0) return 'All Clear';
     return '₹${remaining.toStringAsFixed(0)} Due';
   }
 
   Color _getFeeColor() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     return (due - paid) > 0 ? Colors.red : Colors.green;
   }
 
   String _getFeeStatus() {
-    final due = double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
-    final paid = double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ?? 0;
+    final due =
+        double.tryParse(_summary['fees']?['total_due']?.toString() ?? '0') ?? 0;
+    final paid =
+        double.tryParse(_summary['fees']?['total_paid']?.toString() ?? '0') ??
+            0;
     return (due - paid) > 0 ? 'Overdue' : 'Paid';
   }
 
@@ -317,7 +337,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     // Use _studentDetails if available, fallback to basic _children data
     final source = _studentDetails.isNotEmpty
         ? _studentDetails
-        : (_children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{});
+        : (_children.isNotEmpty
+            ? _children[_selectedChildIndex]
+            : <String, dynamic>{});
     final name = source['name']?.toString() ?? '-';
     final classId = source['class_id']?.toString() ?? '-';
     final rollNumber = source['roll_number']?.toString() ?? '-';
@@ -343,27 +365,38 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
               radius: 26,
               backgroundColor: Colors.white24,
               child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 22)),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22)),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 17)),
+                  Text(name,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 17)),
                   const SizedBox(height: 3),
                   Text('Class $classId  •  Roll: $rollNumber',
-                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 12)),
                   const SizedBox(height: 2),
                   Text('$gender  •  $phone',
-                      style: const TextStyle(color: Colors.white60, fontSize: 11)),
+                      style:
+                          const TextStyle(color: Colors.white60, fontSize: 11)),
                 ],
               ),
             ),
             Column(children: [
-              const Icon(Icons.info_outline_rounded, color: Colors.white60, size: 20),
+              const Icon(Icons.info_outline_rounded,
+                  color: Colors.white60, size: 20),
               const SizedBox(height: 4),
-              const Text('Details', style: TextStyle(color: Colors.white60, fontSize: 9)),
+              const Text('Details',
+                  style: TextStyle(color: Colors.white60, fontSize: 9)),
             ]),
           ],
         ),
@@ -375,7 +408,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   void _showFullChildProfile() {
     final s = _studentDetails.isNotEmpty
         ? _studentDetails
-        : (_children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{});
+        : (_children.isNotEmpty
+            ? _children[_selectedChildIndex]
+            : <String, dynamic>{});
     final name = s['name']?.toString() ?? '-';
     final classId = s['class_id']?.toString() ?? '-';
     final rollNumber = s['roll_number']?.toString() ?? '-';
@@ -392,13 +427,16 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     final city = s['city']?.toString() ?? '';
     final state = s['state']?.toString() ?? '';
     final pincode = s['pincode']?.toString() ?? '';
-    final fullAddress = [address, city, state, pincode].where((v) => v.isNotEmpty && v != '-').join(', ');
+    final fullAddress = [address, city, state, pincode]
+        .where((v) => v.isNotEmpty && v != '-')
+        .join(', ');
     final category = s['category']?.toString() ?? '-';
     final religion = s['religion']?.toString() ?? '-';
     final nationality = s['nationality']?.toString() ?? '-';
     final bloodGroup = s['blood_group']?.toString() ?? '-';
     final aadhar = s['aadhar_number']?.toString() ?? '-';
-    final admissionDate = s['admission_date']?.toString().split('T').first ?? '-';
+    final admissionDate =
+        s['admission_date']?.toString().split('T').first ?? '-';
     final previousSchool = s['previous_school']?.toString() ?? '-';
     final previousClass = s['previous_class']?.toString() ?? '-';
 
@@ -424,16 +462,20 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                     radius: 36,
                     backgroundColor: Colors.green.withOpacity(0.12),
                     child: Text(name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                        style: TextStyle(color: Colors.green[700], fontWeight: FontWeight.bold, fontSize: 28)),
+                        style: TextStyle(
+                            color: Colors.green[700],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 28)),
                   ),
                   const SizedBox(height: 10),
-                  Text(name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text(name,
+                      style: const TextStyle(
+                          fontSize: 20, fontWeight: FontWeight.bold)),
                   Text('Class $classId  •  Roll: $rollNumber',
                       style: TextStyle(color: Colors.grey[600], fontSize: 13)),
                 ]),
               ),
               const SizedBox(height: 20),
-
               _profileSection('Personal Information'),
               _profileRow('Gender', gender),
               _profileRow('Date of Birth', dob),
@@ -441,13 +483,11 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
               _profileRow('Phone', phone),
               _profileRow('Email', email),
               _profileRow('Aadhar Number', aadhar),
-
               const SizedBox(height: 16),
               _profileSection('Background'),
               _profileRow('Category', category),
               _profileRow('Religion', religion),
               _profileRow('Nationality', nationality),
-
               const SizedBox(height: 16),
               _profileSection('Family Details'),
               _profileRow("Father's Name", parentName),
@@ -455,17 +495,15 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
               _profileRow("Father's Occupation", parentOccupation),
               _profileRow("Mother's Name", motherName),
               _profileRow("Mother's Phone", motherPhone),
-
               const SizedBox(height: 16),
               _profileSection('Address'),
-              _profileRow('Full Address', fullAddress.isNotEmpty ? fullAddress : '-'),
-
+              _profileRow(
+                  'Full Address', fullAddress.isNotEmpty ? fullAddress : '-'),
               const SizedBox(height: 16),
               _profileSection('Education'),
               _profileRow('Admission Date', admissionDate),
               _profileRow('Previous School', previousSchool),
               _profileRow('Previous Class', previousClass),
-
               const SizedBox(height: 24),
             ],
           ),
@@ -478,9 +516,17 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(children: [
-        Container(width: 3, height: 16, decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(2))),
+        Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+                color: Colors.green, borderRadius: BorderRadius.circular(2))),
         const SizedBox(width: 8),
-        Text(title, style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.green[700])),
+        Text(title,
+            style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: Colors.green[700])),
       ]),
     );
   }
@@ -491,9 +537,14 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 130, child: Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 13))),
-          Expanded(child: Text(value.isEmpty || value == 'null' ? '-' : value,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13))),
+          SizedBox(
+              width: 130,
+              child: Text(label,
+                  style: TextStyle(color: Colors.grey[500], fontSize: 13))),
+          Expanded(
+              child: Text(value.isEmpty || value == 'null' ? '-' : value,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w500, fontSize: 13))),
         ],
       ),
     );
@@ -512,14 +563,18 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Attendance Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Attendance Summary',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _detailStat('Total Days', '${att['total'] ?? 0}', Colors.blue),
                 _detailStat('Present', '${att['present'] ?? 0}', Colors.green),
-                _detailStat('Absent', '${(att['total'] ?? 0) - (att['present'] ?? 0)}', Colors.red),
+                _detailStat(
+                    'Absent',
+                    '${(att['total'] ?? 0) - (att['present'] ?? 0)}',
+                    Colors.red),
               ],
             ),
             const SizedBox(height: 20),
@@ -527,7 +582,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: LinearProgressIndicator(
-                value: (double.tryParse(att['percentage']?.toString() ?? '0') ?? 0) / 100,
+                value: (double.tryParse(att['percentage']?.toString() ?? '0') ??
+                        0) /
+                    100,
                 minHeight: 12,
                 backgroundColor: Colors.grey[200],
                 valueColor: const AlwaysStoppedAnimation(Colors.green),
@@ -535,7 +592,8 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
             ),
             const SizedBox(height: 8),
             Text('${att['percentage'] ?? 0}% Attendance Rate',
-                style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[600])),
+                style: TextStyle(
+                    fontWeight: FontWeight.w600, color: Colors.grey[600])),
           ],
         ),
       ),
@@ -557,14 +615,18 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Fee Summary', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text('Fee Summary',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _detailStat('Total Due', '₹${due.toStringAsFixed(0)}', Colors.blue),
-                _detailStat('Paid', '₹${paid.toStringAsFixed(0)}', Colors.green),
-                _detailStat('Remaining', '₹${(due - paid).toStringAsFixed(0)}', Colors.red),
+                _detailStat(
+                    'Total Due', '₹${due.toStringAsFixed(0)}', Colors.blue),
+                _detailStat(
+                    'Paid', '₹${paid.toStringAsFixed(0)}', Colors.green),
+                _detailStat('Remaining', '₹${(due - paid).toStringAsFixed(0)}',
+                    Colors.red),
               ],
             ),
             const SizedBox(height: 20),
@@ -574,7 +636,8 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                 value: due > 0 ? (paid / due).clamp(0, 1) : 0,
                 minHeight: 12,
                 backgroundColor: Colors.grey[200],
-                valueColor: AlwaysStoppedAnimation(paid >= due ? Colors.green : Colors.orange),
+                valueColor: AlwaysStoppedAnimation(
+                    paid >= due ? Colors.green : Colors.orange),
               ),
             ),
           ],
@@ -600,20 +663,28 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              const Text('Report Card', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Report Card',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Expanded(
                 child: marks.isEmpty
-                    ? Center(child: Text('No results yet', style: TextStyle(color: Colors.grey[400])))
+                    ? Center(
+                        child: Text('No results yet',
+                            style: TextStyle(color: Colors.grey[400])))
                     : ListView.builder(
                         controller: scrollCtrl,
                         itemCount: marks.length,
                         itemBuilder: (ctx, i) {
                           final m = marks[i];
-                          final obtained = double.tryParse(m['marks_obtained']?.toString() ?? '0') ?? 0;
-                          final total = double.tryParse(m['total_marks']?.toString() ?? '100') ?? 100;
+                          final obtained = double.tryParse(
+                                  m['marks_obtained']?.toString() ?? '0') ??
+                              0;
+                          final total = double.tryParse(
+                                  m['total_marks']?.toString() ?? '100') ??
+                              100;
                           final pct = total > 0 ? (obtained / total) * 100 : 0;
-                          final grade = AcademicUtils.generateGrade(pct.toDouble());
+                          final grade =
+                              AcademicUtils.generateGrade(pct.toDouble());
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
@@ -621,28 +692,41 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                             decoration: BoxDecoration(
                               color: Colors.blue.withOpacity(0.04),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blue.withOpacity(0.12)),
+                              border: Border.all(
+                                  color: Colors.blue.withOpacity(0.12)),
                             ),
                             child: Row(
                               children: [
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(m['subject']?.toString() ?? 'Subject',
-                                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                      Text('${m['exam_type'] ?? ''} • Rank: ${m['class_rank'] ?? '-'}',
-                                          style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                                      Text(
+                                          m['subject']?.toString() ?? 'Subject',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                              fontSize: 14)),
+                                      Text(
+                                          '${m['exam_type'] ?? ''} • Rank: ${m['class_rank'] ?? '-'}',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.grey[500])),
                                     ],
                                   ),
                                 ),
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text('${obtained.toStringAsFixed(0)}/${total.toStringAsFixed(0)}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold)),
+                                    Text(
+                                        '${obtained.toStringAsFixed(0)}/${total.toStringAsFixed(0)}',
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold)),
                                     Text('Grade: $grade',
-                                        style: TextStyle(fontSize: 12, color: Colors.blue[700], fontWeight: FontWeight.w600)),
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.blue[700],
+                                            fontWeight: FontWeight.w600)),
                                   ],
                                 ),
                               ],
@@ -675,11 +759,14 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           padding: const EdgeInsets.all(20),
           child: Column(
             children: [
-              const Text('Notices & Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text('Notices & Alerts',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               Expanded(
                 child: alerts.isEmpty
-                    ? Center(child: Text('No alerts', style: TextStyle(color: Colors.grey[400])))
+                    ? Center(
+                        child: Text('No alerts',
+                            style: TextStyle(color: Colors.grey[400])))
                     : ListView.builder(
                         controller: scrollCtrl,
                         itemCount: alerts.length,
@@ -691,30 +778,43 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: isRead ? Colors.grey.withOpacity(0.04) : Colors.orange.withOpacity(0.06),
+                              color: isRead
+                                  ? Colors.grey.withOpacity(0.04)
+                                  : Colors.orange.withOpacity(0.06),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: isRead ? Colors.grey.withOpacity(0.1) : Colors.orange.withOpacity(0.2)),
+                              border: Border.all(
+                                  color: isRead
+                                      ? Colors.grey.withOpacity(0.1)
+                                      : Colors.orange.withOpacity(0.2)),
                             ),
                             child: Row(
                               children: [
                                 Icon(
-                                  isRead ? Icons.check_circle_outline : Icons.notifications_active_rounded,
+                                  isRead
+                                      ? Icons.check_circle_outline
+                                      : Icons.notifications_active_rounded,
                                   color: isRead ? Colors.grey : Colors.orange,
                                   size: 20,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(alert['message']?.toString() ?? '',
                                           style: TextStyle(
                                             fontSize: 13,
-                                            fontWeight: isRead ? FontWeight.normal : FontWeight.w600,
+                                            fontWeight: isRead
+                                                ? FontWeight.normal
+                                                : FontWeight.w600,
                                           )),
                                       const SizedBox(height: 4),
-                                      Text(alert['created_at']?.toString() ?? '',
-                                          style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                                      Text(
+                                          alert['created_at']?.toString() ?? '',
+                                          style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.grey[400])),
                                     ],
                                   ),
                                 ),
@@ -734,7 +834,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   Widget _detailStat(String label, String value, Color color) {
     return Column(
       children: [
-        Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 20)),
+        Text(value,
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 20)),
         const SizedBox(height: 4),
         Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
       ],
@@ -750,8 +852,12 @@ class _InteractiveTile extends StatelessWidget {
   final VoidCallback onTap;
 
   const _InteractiveTile({
-    required this.title, required this.value, required this.status,
-    required this.icon, required this.color, required this.onTap,
+    required this.title,
+    required this.value,
+    required this.status,
+    required this.icon,
+    required this.color,
+    required this.onTap,
   });
 
   @override
@@ -781,21 +887,31 @@ class _InteractiveTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  Text(title,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                   const SizedBox(height: 3),
-                  Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(value,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
             Column(
               children: [
                 Chip(
-                  label: Text(status, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+                  label: Text(status,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold)),
                   backgroundColor: color.withOpacity(0.1),
                   side: BorderSide.none,
                   visualDensity: VisualDensity.compact,
                 ),
-                Icon(Icons.chevron_right_rounded, color: color.withOpacity(0.4), size: 20),
+                Icon(Icons.chevron_right_rounded,
+                    color: color.withOpacity(0.4), size: 20),
               ],
             ),
           ],
