@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const staffController = require('../controllers/staffController');
-const { verifyToken, verifyRole } = require('../middleware/authMiddleware');
+const authMiddleware = require('../middleware/authMiddleware');
 
-router.post('/', verifyToken, verifyRole(['admin']), staffController.createStaff);
-router.get('/', verifyToken, staffController.getAllStaff);
+router.post('/', authMiddleware, staffController.createStaff);
+router.get('/', authMiddleware, staffController.getAllStaff);
 
 module.exports = router;
