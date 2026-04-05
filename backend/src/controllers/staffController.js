@@ -16,7 +16,10 @@ exports.createStaff = async (req, res) => {
         // Only spawn ERP user identity if toggle is authentically active
         if (can_login) {
             // Usually we'd take username via req.body, but for ERP let's use phone or unique employee_code or email
-            const username = req.body.username || phone || email || employee_code;
+            let username = req.body.username || phone || email || employee_code;
+            if (!username.includes('@')) {
+                username = `${username}@kvm.edu`;
+            }
             const rawPassword = req.body.password || 'kvmerp123';
             const hash = await bcrypt.hash(rawPassword, 10);
             
