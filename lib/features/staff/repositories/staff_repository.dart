@@ -6,6 +6,7 @@ import '../../attendance/repositories/attendance_repository.dart';
 import '../../../core/constants/app_constants.dart';
 import 'package:http/http.dart' as http;
 import '../../auth/repositories/auth_repository.dart';
+import '../../../services/sync/sync_service.dart';
 
 final staffRepositoryProvider = Provider((ref) => StaffRepository(
       ref.read(sqliteServiceProvider),
@@ -60,8 +61,20 @@ class StaffRepository {
       throw Exception(body['message'] ?? 'Failed to create staff');
     }
 
-    // Force an immediate sync pull so SQLite gets the newly created user without waiting 30s
-    // (Assuming SyncService handles its own loops, but we can do a quick manual pull here if needed)
+    final body = jsonDecode(response.body);
+    final finalStaff = staff.copyWith(
+      userId: body['user_id'], // Retrieve the backend-generated user_id
+      canLogin: staff.canLogin, 
+      isSynced: true,
+      updatedAt: DateTime.now()
+    );
+
+    await _sqliteService.insert('staff', finalStaff.toMap());
+    
+    // Force an immediate sync pull to grab the 'users' entry if it was spawned locally 
+    try { 
+        await _ref.read(syncServiceProvider).runSyncSafe(); 
+    } catch (_) {}
   }
 
   Future<void> updateStaffLocally(StaffModel staff) async {
