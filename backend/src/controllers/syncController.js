@@ -127,7 +127,7 @@ exports.syncPull = async (req, res) => {
             try {
                 // Try pulling with updated_at delta
                 const result = await db.query(
-                    `SELECT * FROM "${table}" WHERE updated_at > $1`, 
+                    `SELECT * FROM "${table}" WHERE updated_at::timestamptz > $1::timestamptz`, 
                     [lastSync]
                 );
                 pullPayload[table] = result.rows.length > 0 ? result.rows : [];
