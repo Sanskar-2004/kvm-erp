@@ -6,6 +6,7 @@ import '../../../../models/student_model.dart';
 import '../../../core/constants/class_constants.dart';
 import 'add_student_screen.dart';
 import 'student_detail_screen.dart';
+import '../../auth/repositories/auth_repository.dart';
 
 // Provides standard fetched students via lazy rendering
 final studentsListProvider = FutureProvider.autoDispose<List<StudentModel>>((ref) async {
@@ -25,6 +26,20 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   String _selectedCategory = 'All';
   String _sortBy = 'Name';
   String _searchQuery = '';
+  String _userRole = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final session = await ref.read(authRepositoryProvider).getSession();
+    if (session != null && mounted) {
+      setState(() => _userRole = session.role);
+    }
+  }
 
   // Canonical filter options (not dynamically extracted)
   final List<String> _availableClasses = ClassConstants.allClassesWithAll;
@@ -258,7 +273,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                                 MaterialPageRoute(builder: (_) => StudentDetailScreen(student: s)),
                               );
                             },
-                            onDelete: () => _confirmDelete(s),
+                            onDelete: _userRole == 'admin' ? () => _confirmDelete(s) : null,
                           );
                         },
                       ),
@@ -394,9 +409,9 @@ class _StudentCard extends StatelessWidget {
   final StudentModel student;
   final int index;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
-  const _StudentCard({required this.student, required this.index, required this.onTap, required this.onDelete});
+  const _StudentCard({required this.student, required this.index, required this.onTap, this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -475,13 +490,14 @@ class _StudentCard extends StatelessWidget {
                     ),
                   Row(
                     children: [
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
-                        onPressed: onDelete,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                      const SizedBox(width: 8),
+                      if (onDelete != null)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Colors.red),
+                          onPressed: onDelete,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      if (onDelete != null) const SizedBox(width: 8),
                       const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
                     ],
                   ),

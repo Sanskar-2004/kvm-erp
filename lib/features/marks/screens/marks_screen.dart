@@ -391,15 +391,16 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
                   await db.insert('marks', {
                     'id': 'mark_${student.id}_${examType}_${selectedSubject}_${DateTime.now().millisecondsSinceEpoch}',
                     'student_id': student.id,
-                    'date': DateTime.now().toIso8601String(),
+                    'class_id': _selectedClass,
+                    'exam_date': DateTime.now().toIso8601String(),
                     'exam_type': examType,
                     'subject': selectedSubject,
                     'marks_obtained': marks,
                     'total_marks': total,
+                    'grade': 'A', // TODO: auto compute grade
                     'device_id': 'device_01',
                     'is_synced': 0,
                     'is_deleted': 0,
-                    'created_at': DateTime.now().toIso8601String(),
                     'updated_at': DateTime.now().toIso8601String(),
                   });
 

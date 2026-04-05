@@ -63,7 +63,7 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
       final staffRes = await http.get(Uri.parse('$BASE_URL/staff'), headers: {'Authorization': 'Bearer ${session.token}'});
       String? myStaffId;
       if (staffRes.statusCode == 200) {
-         final sList = jsonDecode(staffRes.body)['staff'] as List;
+         final sList = jsonDecode(staffRes.body)['data'] as List;
          final me = sList.firstWhere((s) => s['user_id']?.toString() == session.userId, orElse: () => null);
          if (me != null) myStaffId = me['id'];
       }
