@@ -715,27 +715,61 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
   Future<void> _fetchRanks() async {
     setState(() => _isRankLoading = true);
     try {
-      final session = await ref.read(authRepositoryProvider).getSession();
-      if (session == null) return;
+      final db = await SQLiteService().database;
 
-      final response = await http.get(
-        Uri.parse(
-            '$BASE_URL/admin/class-ranks/$_selectedClass/$_selectedExamType'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      // Aggregate marks per student from LOCAL SQLite
+      final results = await db.rawQuery('''
+        SELECT m.student_id, s.name AS student_name,
+               SUM(m.marks_obtained) AS total_obtained,
+               SUM(m.total_marks) AS total_max,
+               ROUND(CAST(SUM(m.marks_obtained) AS REAL) / MAX(SUM(m.total_marks), 1) * 100, 2) AS percentage
+        FROM marks m
+        JOIN students s ON s.id = m.student_id
+        WHERE s.class_id = ? AND m.exam_type = ? AND m.is_deleted = 0
+        GROUP BY m.student_id, s.name
+        ORDER BY percentage DESC
+      ''', [_selectedClass, _selectedExamType]);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          _rankings = List<Map<String, dynamic>>.from(data['rankings'] ?? []);
-          _isRankLoading = false;
-        });
-      } else {
-        setState(() => _isRankLoading = false);
+      // Assign ranks with tie support
+      final ranked = <Map<String, dynamic>>[];
+      int rank = 1;
+      for (int i = 0; i < results.length; i++) {
+        final row = Map<String, dynamic>.from(results[i]);
+        if (i > 0) {
+          final prevPct = double.tryParse(
+                  results[i - 1]['percentage']?.toString() ?? '0') ??
+              0;
+          final currPct =
+              double.tryParse(row['percentage']?.toString() ?? '0') ?? 0;
+          if (currPct < prevPct) rank = i + 1;
+        }
+        row['rank'] = rank;
+        ranked.add(row);
+      }
+
+      setState(() {
+        _rankings = ranked;
+        _isRankLoading = false;
+      });
+
+      if (ranked.isEmpty && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'No marks found for Class $_selectedClass — $_selectedExamType'),
+            backgroundColor: Colors.orange,
+          ),
+        );
       }
     } catch (e) {
       setState(() => _isRankLoading = false);
       debugPrint('Fetch ranks error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Rank error: $e'), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 }
