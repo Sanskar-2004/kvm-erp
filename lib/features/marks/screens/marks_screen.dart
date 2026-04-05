@@ -342,11 +342,12 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
 
   Widget _buildDataGrid() {
     final subjects = _currentSubjects;
+    final gridWidth = 120.0 + (subjects.length * 72.0) + 72.0 + 16.0;
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SizedBox(
-        width: 140 + (subjects.length * 80) + 80,
+        width: gridWidth,
         child: Column(
           children: [
             // ── Header row ──
@@ -356,14 +357,14 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
               child: Row(
                 children: [
                   SizedBox(
-                      width: 140,
+                      width: 120,
                       child: Text('Student',
                           style: TextStyle(
                               fontWeight: FontWeight.bold,
                               fontSize: 13,
                               color: Colors.indigo[800]))),
                   ...subjects.map((s) => SizedBox(
-                      width: 80,
+                      width: 72,
                       child: Text(_shortSubject(s),
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -371,7 +372,7 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
                               fontSize: 11,
                               color: Colors.indigo[700])))),
                   SizedBox(
-                      width: 80,
+                      width: 72,
                       child: Text('Total',
                           textAlign: TextAlign.center,
                           style: TextStyle(
@@ -412,7 +413,7 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
                       children: [
                         // Student name
                         SizedBox(
-                          width: 140,
+                          width: 120,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -433,9 +434,8 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
                           return GestureDetector(
                             onTap: () => _showCellEditor(student, subj, val),
                             child: Container(
-                              width: 80,
+                              width: 72,
                               height: 36,
-                              margin: const EdgeInsets.symmetric(horizontal: 1),
                               decoration: BoxDecoration(
                                 color: val != null
                                     ? (val >= 33
@@ -464,7 +464,7 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
                         }),
                         // Total cell
                         Container(
-                          width: 80,
+                          width: 72,
                           height: 36,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
