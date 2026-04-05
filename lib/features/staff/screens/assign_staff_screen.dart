@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../models/staff_model.dart';
-import '../../models/staff_assignment_model.dart';
+import '../../../models/staff_model.dart';
+import '../../../models/staff_assignment_model.dart';
 import '../repositories/staff_repository.dart';
 import '../repositories/assignment_repository.dart';
 import '../../../core/constants/class_constants.dart';
