@@ -73,7 +73,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final students = List<Map<String, dynamic>>.from(data['data']['students'] ?? []);
+        final students = List<Map<String, dynamic>>.from(data['data']['students'] ?? [])
+            .where((s) => s['is_deleted'] != 1)
+            .toList();
 
         // Extract unique classes - handle both numeric and string class IDs
         final classSet = <String>{'All'};
