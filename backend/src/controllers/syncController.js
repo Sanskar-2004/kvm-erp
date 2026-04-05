@@ -29,9 +29,9 @@ exports.syncPush = async (req, res) => {
             let errors = [];
 
             for (const rawRecord of records) {
+                let record = {};
                 try {
                     // Pre-filter: Explicitly strip payload keeping only columns known exactly natively to Postgres
-                    const record = {};
                     Object.keys(rawRecord).forEach(k => {
                         if (validColumns.includes(k)) record[k] = rawRecord[k];
                     });
@@ -70,7 +70,24 @@ exports.syncPush = async (req, res) => {
                     await db.query(query, values);
                     successfulUpserts++;
                 } catch (e) {
-                    errors.push({ recordId: rawRecord.id, error: e.message });
+                    if (e.code === '23502' && record.id) {
+                        try {
+                            // Partial payload (delta) triggered INSERT NOT NULL fail. Degrade to standard UPDATE.
+                            const columns = Object.keys(record);
+                            const updateCols = columns.filter(col => col !== 'id');
+                            if (updateCols.length > 0) {
+                                const setClause = updateCols.map((col, i) => `"${col}" = $${i + 2}`).join(', ');
+                                const updateVals = [record.id, ...updateCols.map(col => record[col])];
+                                const updateQuery = `UPDATE "${tableName}" SET ${setClause} WHERE id = $1`;
+                                await db.query(updateQuery, updateVals);
+                            }
+                            successfulUpserts++;
+                        } catch (updateErr) {
+                            errors.push({ recordId: rawRecord.id, error: updateErr.message });
+                        }
+                    } else {
+                        errors.push({ recordId: rawRecord.id, error: e.message });
+                    }
                 }
             }
 
