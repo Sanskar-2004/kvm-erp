@@ -40,11 +40,14 @@ class DashboardService {
     return SqfliteUtils.toInt(res.first['count']) ?? 0;
   }
 
-  /// Retrieves the total pending (due) fees from the fees table
+  /// Retrieves the total pending (due) fees from the student_fees table
   Future<double> getPendingFees() async {
     final db = await _db.database;
-    final res = await db.rawQuery('SELECT SUM(due_amount) as total_due FROM fees WHERE status != ?', ['paid']);
-    
+    final res = await db.rawQuery(
+      'SELECT SUM(amount_due - amount_paid) as total_due FROM student_fees WHERE status != ?',
+      ['PAID'],
+    );
+
     if (res.isEmpty || res.first['total_due'] == null) return 0.0;
     return (res.first['total_due'] as num).toDouble();
   }

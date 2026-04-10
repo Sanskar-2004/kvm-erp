@@ -30,16 +30,17 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
     try {
       final db = await SQLiteService().database;
       final fees = await db.rawQuery('''
-        SELECT student_id, student_name, class_id,
-               SUM(amount) as total_amount,
-               SUM(paid_amount) as total_paid,
-               SUM(due_amount) as total_due,
-               MAX(paid_date) as last_paid,
-               MIN(CASE WHEN status != 'paid' THEN due_date END) as next_due
-        FROM fees
-        WHERE is_deleted = 0
-        GROUP BY student_id
-        ORDER BY class_id ASC, student_name ASC
+        SELECT sf.student_id, s.name as student_name, s.class_id,
+               SUM(sf.amount_due) as total_amount,
+               SUM(sf.amount_paid) as total_paid,
+               SUM(sf.amount_due - sf.amount_paid) as total_due,
+               MAX(sf.paid_date) as last_paid,
+               sf.academic_year
+        FROM student_fees sf
+        LEFT JOIN students s ON s.id = sf.student_id
+        WHERE sf.is_deleted = 0
+        GROUP BY sf.student_id
+        ORDER BY s.class_id ASC, s.name ASC
       ''');
 
       final map = <String, Map<String, dynamic>>{};

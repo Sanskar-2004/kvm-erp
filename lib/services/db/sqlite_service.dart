@@ -509,10 +509,10 @@ class SQLiteService {
       String studentId) async {
     final db = await database;
     return await db.rawQuery('''
-      SELECT fee_type as month, paid_amount as amount_paid, paid_date, status, transaction_id as payment_method
-      FROM fees
+      SELECT month, amount_paid, paid_date, status, 'N/A' as payment_method
+      FROM student_fees
       WHERE student_id = ? AND is_deleted = 0
-      ORDER BY due_date DESC LIMIT 20
+      ORDER BY month DESC LIMIT 20
     ''', [studentId]);
   }
 
