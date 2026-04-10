@@ -341,15 +341,15 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
 
   void _showStudentFeeDetail(
       StudentModel student, Map<String, dynamic>? feeSummary) async {
-    // Load detailed fee records
+    // Load detailed fee records from student_fees
     List<Map<String, dynamic>> records = [];
     try {
       final db = await SQLiteService().database;
       records = await db.query(
-        'fees',
+        'student_fees',
         where: 'student_id = ? AND is_deleted = 0',
         whereArgs: [student.id],
-        orderBy: 'due_date DESC',
+        orderBy: 'month ASC',
       );
     } catch (e) {
       debugPrint('Fee detail error: $e');
@@ -360,6 +360,11 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
     final totalDue = totalAmount - totalPaid;
 
     if (!mounted) return;
+
+    const monthNames = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+    ];
 
     showModalBottomSheet(
       context: context,
@@ -457,12 +462,18 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                         itemCount: records.length,
                         itemBuilder: (ctx, i) {
                           final r = records[i];
-                          final status = r['status']?.toString() ?? 'pending';
-                          final sColor = status == 'paid'
+                          final status = (r['status']?.toString() ?? 'UNPAID').toUpperCase();
+                          final amountDue = (r['amount_due'] as num?)?.toDouble() ?? 0;
+                          final amountPaid = (r['amount_paid'] as num?)?.toDouble() ?? 0;
+                          final monthNum = (r['month'] as int?) ?? 0;
+                          final monthLabel = (monthNum >= 1 && monthNum <= 12)
+                              ? monthNames[monthNum - 1]
+                              : 'Month $monthNum';
+                          final sColor = status == 'PAID'
                               ? Colors.green
-                              : status == 'overdue'
-                                  ? Colors.red
-                                  : Colors.orange;
+                              : status == 'PARTIAL'
+                                  ? Colors.orange
+                                  : Colors.red;
 
                           return Container(
                             margin: const EdgeInsets.only(bottom: 6),
@@ -476,7 +487,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                             child: Row(
                               children: [
                                 Icon(
-                                  status == 'paid'
+                                  status == 'PAID'
                                       ? Icons.check_circle
                                       : Icons.schedule,
                                   color: sColor,
@@ -489,15 +500,14 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                          r['fee_type']
-                                                  ?.toString()
-                                                  .toUpperCase() ??
-                                              '',
+                                          monthLabel,
                                           style: const TextStyle(
                                               fontWeight: FontWeight.w600,
                                               fontSize: 12)),
                                       Text(
-                                          'Due: ${r['due_date'] ?? '—'}${r['paid_date'] != null ? ' • Paid: ${r['paid_date']}' : ''}',
+                                          r['paid_date'] != null
+                                              ? 'Paid: ${r['paid_date'].toString().split('T').first}'
+                                              : 'Not yet paid',
                                           style: TextStyle(
                                               fontSize: 10,
                                               color: Colors.grey[500])),
@@ -507,12 +517,12 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   children: [
-                                    Text('₹${r['amount'] ?? 0}',
+                                    Text('₹${amountDue.toStringAsFixed(0)}',
                                         style: const TextStyle(
                                             fontWeight: FontWeight.bold,
                                             fontSize: 13)),
-                                    if ((r['paid_amount'] as num? ?? 0) > 0)
-                                      Text('Paid: ₹${r['paid_amount']}',
+                                    if (amountPaid > 0)
+                                      Text('Paid: ₹${amountPaid.toStringAsFixed(0)}',
                                           style: TextStyle(
                                               fontSize: 10,
                                               color: Colors.green[600])),
