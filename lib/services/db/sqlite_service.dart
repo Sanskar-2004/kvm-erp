@@ -591,6 +591,55 @@ class SQLiteService {
     }
   }
 
+  /// Bulk-upsert student_fees rows received from a backend sync pull.
+  /// Safely ignores any unknown columns so it won't break on schema mismatches.
+  Future<void> upsertStudentFees(List<Map<String, dynamic>> fees) async {
+    if (fees.isEmpty) return;
+    final db = await database;
+
+    const knownCols = [
+      'id', 'student_id', 'academic_year', 'month',
+      'amount_due', 'amount_paid', 'status', 'paid_date',
+      'device_id', 'is_synced', 'is_deleted',
+      'created_at', 'updated_at',
+    ];
+
+    final batch = db.batch();
+    for (final raw in fees) {
+      // Strip unknown columns so we never hit "table has no column X"
+      final record = <String, dynamic>{};
+      for (final col in knownCols) {
+        if (raw.containsKey(col)) record[col] = raw[col];
+      }
+      if (!record.containsKey('id') || record['id'] == null) continue;
+
+      // Fill required NOT-NULL defaults if missing or explicitly null
+      record['student_id'] = record['student_id'] ?? '';
+      record['academic_year'] = record['academic_year'] ?? '2026-2027';
+      record['month'] = int.tryParse(record['month']?.toString() ?? '1') ?? 1;
+      
+      record['amount_due'] = double.tryParse(record['amount_due']?.toString() ?? '0') ?? 0.0;
+      record['amount_paid'] = double.tryParse(record['amount_paid']?.toString() ?? '0') ?? 0.0;
+      
+      record['status'] = record['status'] ?? 'UNPAID';
+      
+      // Strict int cast for boolean flags to avoid SQLite argument errors / NULL logic bugs
+      record['is_synced'] = (record['is_synced'] == true || record['is_synced'] == 1) ? 1 : 0;
+      record['is_deleted'] = (record['is_deleted'] == true || record['is_deleted'] == 1) ? 1 : 0;
+      
+      final now = DateTime.now().toIso8601String();
+      record['created_at'] = record['created_at'] ?? now;
+      record['updated_at'] = record['updated_at'] ?? now;
+
+      batch.insert(
+        'student_fees',
+        record,
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    }
+    await batch.commit(noResult: true);
+  }
+
   Future<void> close() async {
     final db = await database;
     await db.close();

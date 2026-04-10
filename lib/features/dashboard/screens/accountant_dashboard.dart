@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
+import '../../../services/db/sqlite_service.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../fees/providers/fee_analytics_provider.dart';
 import 'student_fee_detail_screen.dart';
@@ -55,8 +56,14 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadStudents();
-    _loadFeesOverview();
+    // Load students + sync fees first, THEN compute analytics so SQLite is populated
+    _loadStudentsAndFees();
+  }
+
+  /// Runs student sync (which also persists student_fees), then loads fee analytics.
+  Future<void> _loadStudentsAndFees() async {
+    await _loadStudents();
+    await _loadFeesOverview();
   }
 
   @override
@@ -89,6 +96,15 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
             List<Map<String, dynamic>>.from(data['data']['students'] ?? [])
                 .where((s) => s['is_deleted'] != 1)
                 .toList();
+
+        // ── Persist student_fees from sync response to SQLite ──
+        // This ensures the local analytics & fees_screen queries find real data.
+        final rawFees =
+            List<Map<String, dynamic>>.from(data['data']['student_fees'] ?? []);
+        if (rawFees.isNotEmpty) {
+          await SQLiteService().upsertStudentFees(rawFees);
+          debugPrint('[Sync] Upserted ${rawFees.length} student_fees rows to SQLite');
+        }
 
         // Extract unique classes - handle both numeric and string class IDs
         final classSet = <String>{'All'};

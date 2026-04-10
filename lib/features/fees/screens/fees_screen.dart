@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../students/repositories/student_repository.dart';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
+import '../../auth/repositories/auth_repository.dart';
 
 class FeesScreen extends ConsumerStatefulWidget {
   const FeesScreen({super.key});
@@ -28,6 +32,32 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
 
   Future<void> _loadFeeData() async {
     try {
+      // ── Step 1: Pull student_fees from the backend and persist to SQLite ──
+      // Fees are created by the accountant on the server; they only land in
+      // local SQLite after an explicit sync pull.
+      try {
+        final session = await ref.read(authRepositoryProvider).getSession();
+        if (session != null) {
+          final response = await http.get(
+            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+            headers: {'Authorization': 'Bearer ${session.token}'},
+          );
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final rawFees = List<Map<String, dynamic>>.from(
+                data['data']['student_fees'] ?? []);
+            if (rawFees.isNotEmpty) {
+              await SQLiteService().upsertStudentFees(rawFees);
+              debugPrint('[FeesScreen] Synced ${rawFees.length} fee rows to SQLite');
+            }
+          }
+        }
+      } catch (syncError) {
+        debugPrint('[FeesScreen] Sync pull failed (offline?): $syncError');
+        // Continue anyway — show whatever is already in SQLite
+      }
+
+      // ── Step 2: Query local SQLite (now populated) ──
       final db = await SQLiteService().database;
       final fees = await db.rawQuery('''
         SELECT sf.student_id, s.name as student_name, s.class_id,

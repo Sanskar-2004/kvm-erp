@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/db/sqlite_service.dart';
+import '../../../services/sync/sync_service.dart';
 
 /// Parent fee screen — shows expandable fee cards for each child
 class ParentFeeScreen extends ConsumerStatefulWidget {
@@ -50,12 +51,32 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
         children = List<Map<String, dynamic>>.from(data['children'] ?? []);
       }
 
-      // If no children linked remotely, simulate with local demo student
+      // If no children linked remotely, match natively by phone!
       if (children.isEmpty) {
-        final db = SQLiteService();
-        final localStudents = await db.query('students', limit: 1);
-        if (localStudents.isNotEmpty) {
-          children = [localStudents.first];
+        try {
+           await ref.read(syncServiceProvider).runSyncSafe();
+        } catch (_) {}
+
+        final db = await SQLiteService().database;
+        
+        final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
+        String? parentContact;
+        if (userRows.isNotEmpty) {
+           parentContact = userRows.first['username']?.toString();
+           if (parentContact == null || parentContact.isEmpty) {
+               parentContact = userRows.first['email']?.toString();
+           }
+        }
+
+        if (parentContact != null && parentContact.trim().isNotEmpty) {
+           final matchedStudents = await db.query(
+              'students', 
+              where: 'is_deleted = 0 AND (parent_phone = ? OR phone = ? OR email = ?)', 
+              whereArgs: [parentContact, parentContact, parentContact]
+           );
+           if (matchedStudents.isNotEmpty) {
+              children = matchedStudents.toList();
+           }
         }
       }
 

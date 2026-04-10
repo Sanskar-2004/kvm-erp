@@ -55,8 +55,10 @@ class AdminDashboard extends ConsumerWidget {
                       icon: Icons.check_circle_rounded,
                       color: Colors.green),
                   _StatCard(
-                      title: 'Admissions',
-                      value: 'Pending',
+                      title: 'Pending Admissions',
+                      value: metrics.pendingAdmissions == 0
+                          ? 'None'
+                          : '${metrics.pendingAdmissions}',
                       icon: Icons.person_add_rounded,
                       color: Colors.orange),
                 ],

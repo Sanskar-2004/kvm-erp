@@ -18,11 +18,13 @@ class DashboardMetrics {
   final double attendancePercentage;
   final int totalStudents;
   final double pendingFees;
+  final int pendingAdmissions;
 
   DashboardMetrics({
     required this.attendancePercentage,
     required this.totalStudents,
     required this.pendingFees,
+    required this.pendingAdmissions,
   });
 }
 
@@ -36,11 +38,13 @@ class DashboardRepository {
     final attendance = await _service.getTodayAttendancePercentage();
     final students = await _service.getTotalStudents();
     final fees = await _service.getPendingFees();
+    final pendingAdmissions = await _service.getPendingAdmissions();
 
     return DashboardMetrics(
       attendancePercentage: attendance,
       totalStudents: students,
       pendingFees: fees,
+      pendingAdmissions: pendingAdmissions,
     );
   }
 }

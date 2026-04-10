@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
 import '../../../services/db/sqlite_service.dart';
+import '../../../services/sync/sync_service.dart';
 
 class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({Key? key}) : super(key: key);
@@ -34,30 +35,40 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
     }
 
     try {
-      // Fetch student profile from sync/pull (find student matching userId)
-      final pullResp = await http.get(
-        Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      // 1. Fully synchronize natively via SyncService (background fail-safe)
+      try {
+        await ref.read(syncServiceProvider).runSyncSafe();
+      } catch (syncErr) {
+        debugPrint('Student dashboard sync error (offline?): $syncErr');
+      }
 
-      if (pullResp.statusCode == 200) {
-        final pullData = jsonDecode(pullResp.body);
-        final students =
-            List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+      final studentId = session.userId.toString();
 
-        // Find student matching the logged-in userId
-        final match = students.where((s) => s['id'] == session.userId).toList();
-        if (match.isNotEmpty) {
-          setState(() => _student = match.first);
-        } else if (students.isNotEmpty) {
-          // Fallback: use first student if no exact match
-          setState(() => _student = students.first);
+      // 2. Fetch student profile directly from locally synced SQLite 
+      final db = await SQLiteService().database;
+      final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
+      
+      if (studentRows.isNotEmpty) {
+        setState(() => _student = Map<String, dynamic>.from(studentRows.first));
+      } else {
+        // Fallback just in case SQLite hasn't finished merging
+        final fallbackResp = await http.get(
+          Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        );
+        if (fallbackResp.statusCode == 200) {
+           final pullData = jsonDecode(fallbackResp.body);
+           final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+           final match = students.where((s) => s['id'].toString() == studentId).toList();
+           if (match.isNotEmpty) {
+             setState(() => _student = match.first);
+           }
         }
       }
 
-      // Fetch summary (attendance, fees, marks, alerts) from LOCAL SQLite
-      final studentId = _student['id']?.toString() ?? session.userId;
-      final localSummary = await SQLiteService().getStudentSummary(studentId);
+      // 3. Fetch aggregated summary securely from the synced SQLite Engine
+      final accurateId = _student['id']?.toString() ?? studentId;
+      final localSummary = await SQLiteService().getStudentSummary(accurateId);
 
       setState(() {
         _summary = localSummary;

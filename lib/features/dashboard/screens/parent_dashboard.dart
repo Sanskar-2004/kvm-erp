@@ -6,6 +6,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
 import '../../../services/db/sqlite_service.dart';
+import '../../../services/sync/sync_service.dart';
 
 class ParentDashboard extends ConsumerStatefulWidget {
   const ParentDashboard({Key? key}) : super(key: key);
@@ -38,7 +39,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
       final response = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
         headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -48,40 +49,63 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         if (children.isNotEmpty) {
           _loadStudentSummary(children[0]['id']);
         } else {
-          // No linked children — fetch a mock student to show demo data
-          final pullResp = await http.get(
-            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
-            headers: {'Authorization': 'Bearer ${session.token}'},
-          );
-          if (pullResp.statusCode == 200) {
-            final pullData = jsonDecode(pullResp.body);
-            final students = List<Map<String, dynamic>>.from(
-                pullData['data']['students'] ?? []);
+          // No linked children natively on the backend — let's magically match by phone!
+          try {
+             await ref.read(syncServiceProvider).runSyncSafe();
+          } catch (_) {}
 
-            // Provide a static demo student if DB is completely empty
-            final demoStudent = students.isNotEmpty
-                ? students.first
-                : {'id': 'demo123', 'name': 'Demo Student', 'class_id': '10'};
+          final db = await SQLiteService().database;
 
-            setState(() {
-              _children = [
-                {
-                  'id': demoStudent['id'],
-                  'name': demoStudent['name'],
-                  'class_id': demoStudent['class_id'],
-                }
-              ];
-            });
-
-            if (students.isNotEmpty) {
-              _loadStudentSummary(demoStudent['id']);
-            } else {
-              // No DB at all, just stop loading
-              setState(() => _isLoading = false);
-            }
-            return;
+          // 1. Fetch current parent's phone/username
+          final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
+          String? parentContact;
+          if (userRows.isNotEmpty) {
+             parentContact = userRows.first['username']?.toString();
+             if (parentContact == null || parentContact.isEmpty) {
+                 parentContact = userRows.first['email']?.toString();
+             }
           }
-          setState(() => _isLoading = false);
+
+          List<Map<String, Object?>> matchedStudents = [];
+          
+          if (parentContact != null && parentContact.trim().isNotEmpty) {
+             // 2. Fetch all valid students that share this exact phone number!
+             matchedStudents = await db.query(
+                'students', 
+                where: 'is_deleted = 0 AND (parent_phone = ? OR phone = ? OR email = ?)', 
+                whereArgs: [parentContact, parentContact, parentContact]
+             );
+          }
+
+          // 3. Populate dashboard safely
+          if (matchedStudents.isNotEmpty) {
+             setState(() {
+                _children = matchedStudents.map((s) => {
+                   'id': s['id'].toString(),
+                   'name': s['name'].toString(),
+                   'class_id': s['class_id'].toString(),
+                }).toList();
+             });
+             _loadStudentSummary(matchedStudents.first['id'].toString());
+          } else {
+             // Absolutely no children match. Don't show random students like "sd"
+             setState(() {
+                _children = [
+                   {'id': 'demo123', 'name': 'No Child Linked', 'class_id': '-'}
+                ];
+                _isLoading = false; 
+             });
+             // Empty mock summary so the fee tiles load gracefully as cleared
+             setState(() {
+                _summary = {
+                   'attendance': {'percentage': '0'},
+                   'fees': {'total_due': 0, 'total_paid': 0},
+                   'marks': [],
+                   'alerts': []
+                };
+             });
+          }
+          return;
         }
       } else {
         setState(() => _isLoading = false);
@@ -98,30 +122,26 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     if (session == null) return;
 
     try {
-      // Fetch summary from LOCAL SQLite
+      // 1. Run global background sync fully native locally
+      try {
+        await ref.read(syncServiceProvider).runSyncSafe();
+      } catch (syncErr) {
+        debugPrint('Parent dashboard sync error (offline?): $syncErr');
+      }
+
+      // 2. Fetch comprehensive summary securely from SQLite
       final localSummary = await SQLiteService().getStudentSummary(studentId);
       setState(() => _summary = localSummary);
 
-      // Fetch full student details from sync/pull
-      final pullResp = await http.get(
-        Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      );
-
-      if (pullResp.statusCode == 200) {
-        final pullData = jsonDecode(pullResp.body);
-        final students =
-            List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
-        final match = students.where((s) => s['id'] == studentId).toList();
-        if (match.isNotEmpty) {
-          setState(() => _studentDetails = match.first);
-        } else {
-          // Use basic info from _children
-          final child = _children.isNotEmpty
-              ? _children[_selectedChildIndex]
-              : <String, dynamic>{};
-          setState(() => _studentDetails = Map<String, dynamic>.from(child));
-        }
+      // 3. Fetch detailed student profile directly from SQLite 
+      final db = await SQLiteService().database;
+      final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
+      
+      if (studentRows.isNotEmpty) {
+        setState(() => _studentDetails = Map<String, dynamic>.from(studentRows.first));
+      } else {
+        final child = _children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{};
+        setState(() => _studentDetails = Map<String, dynamic>.from(child));
       }
     } catch (e) {
       debugPrint('Summary error: $e');

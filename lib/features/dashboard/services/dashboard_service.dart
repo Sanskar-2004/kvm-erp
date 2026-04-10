@@ -51,6 +51,16 @@ class DashboardService {
     if (res.isEmpty || res.first['total_due'] == null) return 0.0;
     return (res.first['total_due'] as num).toDouble();
   }
+
+  /// Retrieves the count of students with status = 'pending' (awaiting admission approval)
+  Future<int> getPendingAdmissions() async {
+    final db = await _db.database;
+    final res = await db.rawQuery(
+      "SELECT COUNT(id) as count FROM students WHERE status = 'pending' AND is_deleted = 0",
+    );
+    if (res.isEmpty) return 0;
+    return SqfliteUtils.toInt(res.first['count']) ?? 0;
+  }
 }
 
 // Ensure safe type parsing for sqflite results
