@@ -157,8 +157,8 @@ exports.createStudentAccounts = async (req, res) => {
         // Since the Flutter app syncs the full student *after* this API call returns,
         // we must insert a stub student record first, or Postgres throws a 500 FK error.
         await client.query(
-            `INSERT INTO students (id, name, class_id, is_synced)
-             VALUES ($1, 'Pending Sync', 'Unknown', false)
+            `INSERT INTO students (id, name, class_id, is_synced, created_at, updated_at)
+             VALUES ($1, 'Pending Sync', 'Unknown', false, CURRENT_TIMESTAMP::TEXT, CURRENT_TIMESTAMP::TEXT)
              ON CONFLICT (id) DO NOTHING`,
             [student_id]
         );
