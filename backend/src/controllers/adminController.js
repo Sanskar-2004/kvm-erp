@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const bcrypt = require('bcrypt');
 
 // GET /api/admin/finance-summary — Admin financial overview
 exports.getFinanceSummary = async (req, res) => {
@@ -107,5 +108,71 @@ exports.getDueFees = async (req, res) => {
     } catch (e) {
         console.error('[Due Fees Error]', e);
         res.status(500).json({ status: 'error', message: e.message });
+    }
+};
+
+// POST /api/admin/create-student-accounts — Create student + parent login accounts atomically
+exports.createStudentAccounts = async (req, res) => {
+    const client = await db.connect();
+    try {
+        const { student_id, student_username, parent_username, password } = req.body;
+
+        if (!student_id || !student_username || !parent_username || !password) {
+            return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+        }
+
+        await client.query('BEGIN');
+
+        // Check for duplicate usernames (by email convention)
+        const dupCheck = await client.query(
+            `SELECT email FROM users WHERE email = ANY($1)`,
+            [[`${student_username}@kvm.edu`, `${parent_username}@kvm.edu`]]
+        );
+        if (dupCheck.rows.length > 0) {
+            await client.query('ROLLBACK');
+            const dupes = dupCheck.rows.map(r => r.email.replace('@kvm.edu', ''));
+            return res.status(409).json({ status: 'error', message: 'Username already exists', duplicates: dupes });
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Create student user account
+        const studentUserResult = await client.query(
+            `INSERT INTO users (name, email, password_hash, role)
+             VALUES ($1, $2, $3, 'student') RETURNING id`,
+            [student_username, `${student_username}@kvm.edu`, hashedPassword]
+        );
+        const studentUserId = studentUserResult.rows[0].id;
+
+        // Create parent user account (same password)
+        const parentUserResult = await client.query(
+            `INSERT INTO users (name, email, password_hash, role)
+             VALUES ($1, $2, $3, 'parent') RETURNING id`,
+            [parent_username, `${parent_username}@kvm.edu`, hashedPassword]
+        );
+        const parentUserId = parentUserResult.rows[0].id;
+
+        // Link parent -> student in parent_student_map
+        const mapId = `psm_${parentUserId}_${student_id}`;
+        await client.query(
+            `INSERT INTO parent_student_map (id, parent_id, student_id, relationship)
+             VALUES ($1, $2, $3, 'parent')
+             ON CONFLICT (parent_id, student_id) DO NOTHING`,
+            [mapId, parentUserId, student_id]
+        );
+
+        await client.query('COMMIT');
+
+        return res.status(201).json({
+            status: 'success',
+            message: 'Student and parent accounts created successfully',
+            data: { student_user_id: studentUserId, parent_user_id: parentUserId }
+        });
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error('[Create Student Accounts Error]', e);
+        return res.status(500).json({ status: 'error', message: e.message });
+    } finally {
+        client.release();
     }
 };
