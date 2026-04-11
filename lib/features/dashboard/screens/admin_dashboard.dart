@@ -8,7 +8,9 @@ import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
 import '../../staff/screens/staff_screen.dart';
 import 'admin_finance_screen.dart';
-
+import 'package:http/http.dart' as http;
+import '../../auth/repositories/auth_repository.dart';
+import '../../../core/constants/app_constants.dart';
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({Key? key}) : super(key: key);
 
@@ -124,12 +126,53 @@ class AdminDashboard extends ConsumerWidget {
                     color: Colors.indigo,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const AdminFinanceScreen()))),
+                _ActionCard(
+                    title: 'Wipe Core Data',
+                    icon: Icons.delete_forever,
+                    color: Colors.red,
+                    onTap: () => _nukeBackendData(context, ref)),
               ],
             ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _nukeBackendData(BuildContext context, WidgetRef ref) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('⚠️ NUKE CLOUD DB?'),
+        content: const Text('This will instantly delete ALL students, parents, staff, fees, attendance, and marks from the LIVE PostgreSQL server. This action CANNOT BE UNDONE. ONLY the Admin login will remain.\n\nType DELETE to confirm?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('NUKE IT', style: TextStyle(color: Colors.white))
+          ),
+        ]
+      )
+    );
+
+    if (confirm == true) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nuking remote database...')));
+      try {
+        final session = await ref.read(authRepositoryProvider).getSession();
+        final response = await http.get(
+          Uri.parse('\$BASE_URL/admin/nuke-database'),
+          headers: {'Authorization': 'Bearer \${session?.token}'},
+        );
+        if (response.statusCode == 200) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('SUCCESS: Remote cloud DB wiped! Please UNINSTALL AND REINSTALL the app on your emulator to clear the local database.')));
+        } else {
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: \${response.body}')));
+        }
+      } catch(e) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: \$e')));
+      }
+    }
   }
 }
 

@@ -225,3 +225,34 @@ exports.createStudentAccounts = async (req, res) => {
         if (client) client.release();
     }
 };
+
+// GET /api/admin/nuke-database
+exports.nukeDatabase = async (req, res) => {
+    let client;
+    try {
+        client = await db.getClient();
+        await client.query("BEGIN");
+        
+        await client.query("DELETE FROM sync_logs");
+        await client.query("DELETE FROM parent_student_map");
+        await client.query("DELETE FROM attendance");
+        await client.query("DELETE FROM marks");
+        await client.query("DELETE FROM student_fees");
+        await client.query("DELETE FROM fees");
+        await client.query("DELETE FROM timetable");
+        await client.query("DELETE FROM staff_assignments");
+        
+        await client.query("DELETE FROM students");
+        await client.query("DELETE FROM staff");
+        
+        await client.query("DELETE FROM users WHERE role != 'admin'");
+        
+        await client.query("COMMIT");
+        res.json({ status: 'success', message: 'DATABASE FULLY WIPED EXCEPT ADMIN.' });
+    } catch (e) {
+        if (client) await client.query("ROLLBACK");
+        res.status(500).json({ status: 'error', message: e.message });
+    } finally {
+        if (client) client.release();
+    }
+};
