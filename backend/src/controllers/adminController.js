@@ -265,6 +265,9 @@ exports.nukeDatabase = async (req, res) => {
         await safeDelete("fees");
         await safeDelete("timetable");
         await safeDelete("staff_assignments");
+        await safeDelete("subjects");
+        await safeDelete("fee_structure");
+        await safeDelete("alerts");
         await safeDelete("students");
         await safeDelete("staff");
         

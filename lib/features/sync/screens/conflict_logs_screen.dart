@@ -179,7 +179,7 @@ class _ConflictLogsScreenState extends ConsumerState<ConflictLogsScreen> {
       try {
         final session = await ref.read(authRepositoryProvider).getSession();
         final response = await http.post(
-          Uri.parse('${AppConstants.baseUrl}/admin/nuke-database'),
+          Uri.parse('${BASE_URL}/admin/nuke-database'),
           headers: {
             'Authorization': 'Bearer ${session?.token}',
             'Content-Type': 'application/json',
