@@ -58,16 +58,25 @@ exports.generateFees = async (req, res) => {
         const { academic_year, monthly_amount, start_month = 1, end_month = 12 } = req.body;
 
         const records = [];
-        for (let month = start_month; month <= end_month; month++) {
-            const id = `${studentId}_${academic_year}_${month}`;
+        let currentMonth = parseInt(start_month);
+        const targetEndMonth = parseInt(end_month);
+
+        while (true) {
+            const id = `${studentId}_${academic_year}_${currentMonth}`;
             const result = await db.query(
                 `INSERT INTO student_fees (id, student_id, academic_year, month, amount_due, amount_paid, status, created_at, updated_at)
                  VALUES ($1, $2, $3, $4, $5, 0, 'UNPAID', NOW(), NOW())
                  ON CONFLICT (student_id, academic_year, month) DO NOTHING
                  RETURNING *`,
-                [id, studentId, academic_year, month, monthly_amount]
+                [id, studentId, academic_year, currentMonth, monthly_amount]
             );
             if (result.rows.length > 0) records.push(result.rows[0]);
+
+            if (currentMonth === targetEndMonth) break;
+            currentMonth = (currentMonth % 12) + 1;
+            
+            // Safety break to prevent infinite loops if misconfigured
+            if (records.length > 12) break;
         }
 
         res.json({

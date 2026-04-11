@@ -484,7 +484,12 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
                 value: _academicYear,
                 isExpanded: true,
                 items: _yearOptions.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
-                onChanged: (v) => setDialogState(() => _academicYear = v ?? _academicYear),
+                onChanged: (v) {
+                  if (v != null) {
+                    setDialogState(() => _academicYear = v);
+                    setState(() => _academicYear = v);
+                  }
+                },
               ),
               const SizedBox(height: 12),
               Row(
