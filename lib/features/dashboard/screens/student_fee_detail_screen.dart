@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../../services/sync/sync_service.dart';
 
 class StudentFeeDetailScreen extends ConsumerStatefulWidget {
   final String studentId;
@@ -541,7 +542,6 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
 
       if (response.statusCode == 200) {
         // Trigger a background sync pull immediately so local SQLite has the new rows
-        import '../../../services/sync/sync_service.dart'; // Ensure it's available or use ref
         await ref.read(syncServiceProvider).runSyncSafe();
         _loadFees();
         if (mounted) {
