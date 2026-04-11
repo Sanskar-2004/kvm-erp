@@ -113,6 +113,7 @@ exports.getDueFees = async (req, res) => {
 
 // POST /api/admin/create-student-accounts — Create student + parent login accounts
 exports.createStudentAccounts = async (req, res) => {
+    let client;
     try {
         const { student_id, student_username, parent_username, password } = req.body;
 
@@ -120,12 +121,16 @@ exports.createStudentAccounts = async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'Missing required fields' });
         }
 
+        client = await db.getClient();
+        await client.query('BEGIN');
+
         // Check for duplicate usernames (by email convention username@kvm.edu)
-        const dupCheck = await db.query(
+        const dupCheck = await client.query(
             `SELECT email FROM users WHERE email = ANY($1)`,
             [[`${student_username}@kvm.edu`, `${parent_username}@kvm.edu`]]
         );
         if (dupCheck.rows.length > 0) {
+            await client.query('ROLLBACK');
             const dupes = dupCheck.rows.map(r => r.email.replace('@kvm.edu', ''));
             return res.status(409).json({ status: 'error', message: 'Username already exists', duplicates: dupes });
         }
@@ -133,7 +138,7 @@ exports.createStudentAccounts = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Create student user account
-        const studentUserResult = await db.query(
+        const studentUserResult = await client.query(
             `INSERT INTO users (name, email, password_hash, role)
              VALUES ($1, $2, $3, 'student') RETURNING id`,
             [student_username, `${student_username}@kvm.edu`, hashedPassword]
@@ -141,21 +146,33 @@ exports.createStudentAccounts = async (req, res) => {
         const studentUserId = studentUserResult.rows[0].id;
 
         // Create parent user account (same password)
-        const parentUserResult = await db.query(
+        const parentUserResult = await client.query(
             `INSERT INTO users (name, email, password_hash, role)
              VALUES ($1, $2, $3, 'parent') RETURNING id`,
             [parent_username, `${parent_username}@kvm.edu`, hashedPassword]
         );
         const parentUserId = parentUserResult.rows[0].id;
 
+        // CRITICAL FIX: The parent_student_map has a foreign key to students(id).
+        // Since the Flutter app syncs the full student *after* this API call returns,
+        // we must insert a stub student record first, or Postgres throws a 500 FK error.
+        await client.query(
+            `INSERT INTO students (id, name, class_id, is_synced)
+             VALUES ($1, 'Pending Sync', 'Unknown', false)
+             ON CONFLICT (id) DO NOTHING`,
+            [student_id]
+        );
+
         // Link parent -> student in parent_student_map
         const mapId = `psm_${parentUserId}_${student_id}`;
-        await db.query(
+        await client.query(
             `INSERT INTO parent_student_map (id, parent_id, student_id, relationship)
              VALUES ($1, $2, $3, 'parent')
              ON CONFLICT (parent_id, student_id) DO NOTHING`,
             [mapId, parentUserId, student_id]
         );
+
+        await client.query('COMMIT');
 
         return res.status(201).json({
             status: 'success',
@@ -163,7 +180,10 @@ exports.createStudentAccounts = async (req, res) => {
             data: { student_user_id: studentUserId, parent_user_id: parentUserId }
         });
     } catch (e) {
+        if (client) await client.query('ROLLBACK');
         console.error('[Create Student Accounts Error]', e);
         return res.status(500).json({ status: 'error', message: e.message });
+    } finally {
+        if (client) client.release();
     }
 };
