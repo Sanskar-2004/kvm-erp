@@ -2,8 +2,11 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../core/constants/app_constants.dart';
 
+import 'dart:async';
+
 class SQLiteService {
   static Database? _database;
+  static final StreamController<void> onSyncQueued = StreamController<void>.broadcast();
 
   // ── Singleton Access ─────────────────────────────────────────────────
 
@@ -399,8 +402,11 @@ class SQLiteService {
 
   Future<int> insert(String table, Map<String, dynamic> data) async {
     final db = await database;
-    return await db.insert(table, data,
-        conflictAlgorithm: ConflictAlgorithm.replace);
+    final res = await db.insert(table, data, conflictAlgorithm: ConflictAlgorithm.replace);
+    if (table == 'sync_queue') {
+       onSyncQueued.add(null);
+    }
+    return res;
   }
 
   Future<List<Map<String, dynamic>>> query(

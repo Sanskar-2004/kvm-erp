@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'dart:async';
+import 'services/sync/sync_service.dart';
+import 'services/db/sqlite_service.dart';
 import 'core/widgets/main_layout.dart';
 import 'features/auth/repositories/auth_repository.dart';
 import 'features/auth/providers/auth_provider.dart';
@@ -50,6 +53,9 @@ class KVMErpApp extends ConsumerStatefulWidget {
 }
 
 class _KVMErpAppState extends ConsumerState<KVMErpApp> {
+  Timer? _syncTimer;
+  StreamSubscription? _syncTriggerSub;
+
   @override
   void initState() {
     super.initState();
@@ -60,7 +66,36 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
             .firstWhere((e) => e.name == role, orElse: () => UserRole.student);
       });
     }
+
+    // Auto-Sync Features:
+    // 1. Periodic background sync every 30 minutes
+    _syncTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+       _triggerSync();
+    });
+
+    // 2. Real-time immediate sync whenever any local repository adds an item to the sync_queue
+    _syncTriggerSub = SQLiteService.onSyncQueued.stream.listen((_) {
+       _triggerSync();
+    });
   }
+
+  void _triggerSync() {
+     if (mounted) {
+         try {
+             ref.read(syncServiceProvider).runSyncSafe();
+         } catch(e) {
+             debugPrint("Auto-sync trigger failed: \$e");
+         }
+     }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    _syncTriggerSub?.cancel();
+    super.dispose();
+  }
+
 
   @override
   Widget build(BuildContext context) {
