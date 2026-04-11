@@ -220,7 +220,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
       await showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => AlertDialog(
+        builder: (dialogCtx) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
@@ -273,14 +273,15 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
               onPressed: () {
-                Navigator.pop(context); // close dialog
-                Navigator.pop(context, true); // close add screen
+                Navigator.of(dialogCtx).pop(); // close dialog only
               },
               child: const Text('Done'),
             ),
           ],
         ),
       );
+      // Dialog dismissed — now navigate back to students list
+      if (mounted) Navigator.pop(context, true);
     }
   }
 
