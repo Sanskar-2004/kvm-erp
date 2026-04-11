@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/sync/sync_service.dart';
+import '../../../core/utils/academic_utils.dart';
 
 class StudentFeeDetailScreen extends ConsumerStatefulWidget {
   final String studentId;
@@ -23,7 +24,7 @@ class StudentFeeDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen> {
-  Map<String, dynamic> _summary = {};
+  List<Map<String, dynamic>> _fees = [];
   bool _isLoading = true;
   String _academicYear = '2026-2027';
 
