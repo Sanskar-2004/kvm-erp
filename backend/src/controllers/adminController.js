@@ -124,42 +124,80 @@ exports.createStudentAccounts = async (req, res) => {
         client = await db.getClient();
         await client.query('BEGIN');
 
-        // Check for duplicate usernames (by email convention username@kvm.edu)
-        const dupCheck = await client.query(
-            `SELECT email FROM users WHERE email = ANY($1)`,
-            [[`${student_username}@kvm.edu`, `${parent_username}@kvm.edu`]]
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const studentEmail = `${student_username}@kvm.edu`;
+        const parentEmail = `${parent_username}@kvm.edu`;
+
+        let studentUserId;
+        let parentUserId;
+
+        // --- 1. Handle Student Account ---
+        const existingStudent = await client.query(
+            `SELECT id, is_deleted, role FROM users WHERE email = $1`,
+            [studentEmail]
         );
-        if (dupCheck.rows.length > 0) {
-            await client.query('ROLLBACK');
-            const dupes = dupCheck.rows.map(r => r.email.replace('@kvm.edu', ''));
-            return res.status(409).json({ status: 'error', message: 'Username already exists', duplicates: dupes });
+
+        if (existingStudent.rows.length > 0) {
+            const user = existingStudent.rows[0];
+            if (user.role === 'student' && user.is_deleted === 1) {
+                // Revive the soft-deleted student account
+                await client.query(
+                    `UPDATE users SET password_hash = $1, is_deleted = 0, updated_at = CURRENT_TIMESTAMP::TEXT WHERE id = $2`,
+                    [hashedPassword, user.id]
+                );
+                studentUserId = user.id;
+            } else {
+                // Active conflict
+                await client.query('ROLLBACK');
+                return res.status(409).json({ status: 'error', message: 'Username already exists', duplicates: [student_username] });
+            }
+        } else {
+            // Insert fresh student
+            const studentUserResult = await client.query(
+                `INSERT INTO users (name, email, password_hash, role)
+                 VALUES ($1, $2, $3, 'student') RETURNING id`,
+                [student_username, studentEmail, hashedPassword]
+            );
+            studentUserId = studentUserResult.rows[0].id;
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-        // Create student user account
-        const studentUserResult = await client.query(
-            `INSERT INTO users (name, email, password_hash, role)
-             VALUES ($1, $2, $3, 'student') RETURNING id`,
-            [student_username, `${student_username}@kvm.edu`, hashedPassword]
+        // --- 2. Handle Parent Account (Sibling Feature) ---
+        const existingParent = await client.query(
+            `SELECT id, role FROM users WHERE email = $1`,
+            [parentEmail]
         );
-        const studentUserId = studentUserResult.rows[0].id;
 
-        // Create parent user account (same password)
-        const parentUserResult = await client.query(
-            `INSERT INTO users (name, email, password_hash, role)
-             VALUES ($1, $2, $3, 'parent') RETURNING id`,
-            [parent_username, `${parent_username}@kvm.edu`, hashedPassword]
-        );
-        const parentUserId = parentUserResult.rows[0].id;
+        if (existingParent.rows.length > 0) {
+            const user = existingParent.rows[0];
+            if (user.role === 'parent') {
+                // Parent already exists (Adding a Sibling!) -> Re-use Account
+                parentUserId = user.id;
+                // Update their password to match the new one just in case
+                await client.query(
+                    `UPDATE users SET password_hash = $1, is_deleted = 0, updated_at = CURRENT_TIMESTAMP::TEXT WHERE id = $2`,
+                    [hashedPassword, parentUserId]
+                );
+            } else {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ status: 'error', message: 'Username already taken by a non-parent', duplicates: [parent_username] });
+            }
+        } else {
+            // Insert fresh parent
+            const parentUserResult = await client.query(
+                `INSERT INTO users (name, email, password_hash, role)
+                 VALUES ($1, $2, $3, 'parent') RETURNING id`,
+                [parent_username, parentEmail, hashedPassword]
+            );
+            parentUserId = parentUserResult.rows[0].id;
+        }
 
-        // CRITICAL FIX: The parent_student_map has a foreign key to students(id).
-        // Since the Flutter app syncs the full student *after* this API call returns,
-        // we must insert a stub student record first, or Postgres throws a 500 FK error.
+        // --- 3. Manage Student Stub & Map ---
+        // Insert a stub student record to safely satisfy the Foreign Key constraint for the parent_student_map
+        // before the heavy sync engine pushes the real student details to PostgreSQL.
         await client.query(
             `INSERT INTO students (id, name, class_id, is_synced, created_at, updated_at)
              VALUES ($1, 'Pending Sync', 'Unknown', false, CURRENT_TIMESTAMP::TEXT, CURRENT_TIMESTAMP::TEXT)
-             ON CONFLICT (id) DO NOTHING`,
+             ON CONFLICT (id) DO UPDATE SET is_deleted = 0`,
             [student_id]
         );
 
@@ -176,7 +214,7 @@ exports.createStudentAccounts = async (req, res) => {
 
         return res.status(201).json({
             status: 'success',
-            message: 'Student and parent accounts created successfully',
+            message: 'Accounts processed successfully',
             data: { student_user_id: studentUserId, parent_user_id: parentUserId }
         });
     } catch (e) {
