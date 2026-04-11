@@ -5,8 +5,8 @@ import 'package:http/http.dart' as http;
 import '../repositories/student_repository.dart';
 import '../../../core/constants/class_constants.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../../models/student_model.dart';
-import '../../../../core/utils/validator_service.dart';
+import '../../../models/student_model.dart';
+import '../../../core/utils/validator_service.dart';
 import '../../auth/repositories/auth_repository.dart';
 
 class AddStudentScreen extends ConsumerStatefulWidget {
