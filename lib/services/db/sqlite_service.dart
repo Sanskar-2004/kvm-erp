@@ -453,7 +453,7 @@ class SQLiteService {
     await db.transaction(action);
   }
 
-  Future<Map<String, dynamic>> getStudentSummary(String studentId) async {
+  Future<Map<String, dynamic>> getStudentSummary(String studentId, {String? academicYear}) async {
     final db = await database;
 
     // 1. Attendance
@@ -472,11 +472,14 @@ class SQLiteService {
         : '0.0';
 
     // 2. Fees
-    final feeRaw = await db.rawQuery('''
-      SELECT SUM(amount_due) as total_due, SUM(amount_paid) as total_paid
-      FROM student_fees
-      WHERE student_id = ? AND is_deleted = 0
-    ''', [studentId]);
+    String feeQuery = 'SELECT SUM(amount_due) as total_due, SUM(amount_paid) as total_paid FROM student_fees WHERE student_id = ? AND is_deleted = 0';
+    List<dynamic> feeArgs = [studentId];
+    if (academicYear != null) {
+      feeQuery += ' AND academic_year = ?';
+      feeArgs.add(academicYear);
+    }
+    
+    final feeRaw = await db.rawQuery(feeQuery, feeArgs);
 
     final totalDue =
         double.tryParse(feeRaw.first['total_due']?.toString() ?? '0') ?? 0;

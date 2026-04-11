@@ -24,7 +24,9 @@ class StudentFeeDetailScreen extends ConsumerStatefulWidget {
 class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen> {
   List<Map<String, dynamic>> _fees = [];
   bool _isLoading = true;
-  final String _academicYear = '2026-2027';
+  String _academicYear = '2026-2027';
+
+  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
 
   static const _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -261,6 +263,21 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
       appBar: AppBar(
         title: Text(widget.studentName),
         actions: [
+          DropdownButton<String>(
+            value: _academicYear,
+            underline: const SizedBox(),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            items: _yearOptions.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 13)))).toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _academicYear = v;
+                  _isLoading = true;
+                });
+                _loadFees();
+              }
+            },
+          ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadFees),
         ],
       ),
@@ -439,21 +456,105 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
   }
 
   Future<void> _generateFees() async {
+    final amountController = TextEditingController(text: '5000');
+    int startMonth = 4; // Start of Indian academic year
+    int endMonth = 3;   // Standard end logic handled by dialog
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Generate Fee Records', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: amountController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'Monthly Amount',
+                  prefixText: '₹ ',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Academic Year', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              DropdownButton<String>(
+                value: _academicYear,
+                isExpanded: true,
+                items: _yearOptions.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                onChanged: (v) => setDialogState(() => _academicYear = v ?? _academicYear),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                   Expanded(
+                     child: DropdownButtonFormField<int>(
+                       value: startMonth,
+                       decoration: const InputDecoration(labelText: 'From Month', isDense: true),
+                       items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(_monthNames[i]))),
+                       onChanged: (v) => setDialogState(() => startMonth = v ?? startMonth),
+                     ),
+                   ),
+                   const SizedBox(width: 8),
+                   Expanded(
+                     child: DropdownButtonFormField<int>(
+                       value: endMonth == 3 ? 12 : endMonth, // simplified for dialog
+                       decoration: const InputDecoration(labelText: 'To Month', isDense: true),
+                       items: List.generate(12, (i) => DropdownMenuItem(value: i + 1, child: Text(_monthNames[i]))),
+                       onChanged: (v) => setDialogState(() => endMonth = v ?? endMonth),
+                     ),
+                   ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
+              child: const Text('Generate', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isLoading = true);
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session == null) return;
-    await http.post(
-      Uri.parse('$BASE_URL/fees/generate/${widget.studentId}'),
-      headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.token}'},
-      body: jsonEncode({'academic_year': _academicYear, 'monthly_amount': 5000}),
-    );
-    _loadFees();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Fee records generated ✅'),
-        backgroundColor: Colors.green[700],
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ));
+
+    try {
+      final response = await http.post(
+        Uri.parse('$BASE_URL/fees/generate/${widget.studentId}'),
+        headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ${session.token}'},
+        body: jsonEncode({
+          'academic_year': _academicYear, 
+          'monthly_amount': double.tryParse(amountController.text) ?? 5000,
+          'start_month': startMonth,
+          'end_month': endMonth,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        // Trigger a background sync pull immediately so local SQLite has the new rows
+        import '../../../services/sync/sync_service.dart'; // Ensure it's available or use ref
+        await ref.read(syncServiceProvider).runSyncSafe();
+        _loadFees();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: const Text('Fee records generated and synced ✅'),
+            backgroundColor: Colors.green[700],
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
+    } catch (e) {
+      debugPrint('Generation error: $e');
+      setState(() => _isLoading = false);
     }
   }
 }

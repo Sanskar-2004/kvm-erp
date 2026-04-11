@@ -19,6 +19,8 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   Map<String, dynamic> _student = {};
   Map<String, dynamic> _summary = {};
   bool _isLoading = true;
+  String _academicYear = '2026-2027';
+  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
 
   @override
   void initState() {
@@ -68,7 +70,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
       // 3. Fetch aggregated summary securely from the synced SQLite Engine
       final accurateId = _student['id']?.toString() ?? studentId;
-      final localSummary = await SQLiteService().getStudentSummary(accurateId);
+      final localSummary = await SQLiteService().getStudentSummary(accurateId, academicYear: _academicYear);
 
       setState(() {
         _summary = localSummary;
@@ -83,6 +85,27 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('My Dashboard'),
+        actions: [
+          DropdownButton<String>(
+            value: _academicYear,
+            underline: const SizedBox(),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            items: _yearOptions.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 12)))).toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _academicYear = v;
+                  _isLoading = true;
+                });
+                _loadStudentData();
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _loadStudentData,
         child: SingleChildScrollView(

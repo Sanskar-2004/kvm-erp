@@ -22,6 +22,8 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   Map<String, dynamic> _studentDetails = {};
   String? _parentName;
   bool _isLoading = true;
+  String _academicYear = '2026-2027';
+  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
 
   @override
   void initState() {
@@ -145,7 +147,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
       }
 
       // 2. Fetch comprehensive summary securely from SQLite
-      final localSummary = await SQLiteService().getStudentSummary(studentId);
+      final localSummary = await SQLiteService().getStudentSummary(studentId, academicYear: _academicYear);
       setState(() => _summary = localSummary);
 
       // 3. Fetch detailed student profile directly from SQLite 
@@ -168,6 +170,27 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Text('${_parentName ?? "Parent"}\'s Dashboard'),
+        actions: [
+          DropdownButton<String>(
+            value: _academicYear,
+            underline: const SizedBox(),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            items: _yearOptions.map((y) => DropdownMenuItem(value: y, child: Text(y, style: const TextStyle(fontSize: 12)))).toList(),
+            onChanged: (v) {
+              if (v != null) {
+                setState(() {
+                  _academicYear = v;
+                  _isLoading = true;
+                });
+                _loadStudentSummary(_children[_selectedChildIndex]['id']);
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+        ],
+      ),
       body: RefreshIndicator(
         onRefresh: _loadChildren,
         child: SingleChildScrollView(

@@ -55,10 +55,10 @@ exports.updateFee = async (req, res) => {
 exports.generateFees = async (req, res) => {
     try {
         const { studentId } = req.params;
-        const { academic_year, monthly_amount } = req.body;
+        const { academic_year, monthly_amount, start_month = 1, end_month = 12 } = req.body;
 
         const records = [];
-        for (let month = 1; month <= 12; month++) {
+        for (let month = start_month; month <= end_month; month++) {
             const id = `${studentId}_${academic_year}_${month}`;
             const result = await db.query(
                 `INSERT INTO student_fees (id, student_id, academic_year, month, amount_due, amount_paid, status, created_at, updated_at)
@@ -84,8 +84,17 @@ exports.generateFees = async (req, res) => {
 // POST /api/alerts — Create an alert for parent/student
 exports.createAlert = async (req, res) => {
     try {
-        const { user_id, message } = req.body;
+        let { user_id, message } = req.body;
         const id = `alert_${Date.now()}`;
+
+        // If user_id is a UUID (starts with "std_" or just a long string), resolve to numeric ID
+        const isUuid = user_id.toString().length > 10;
+        if (isUuid) {
+            const userRes = await db.query('SELECT id FROM users WHERE student_id = $1', [user_id]);
+            if (userRes.rows.length > 0) {
+                user_id = userRes.rows[0].id;
+            }
+        }
 
         await db.query(
             `INSERT INTO alerts (id, user_id, message) VALUES ($1, $2, $3)`,

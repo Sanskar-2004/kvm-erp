@@ -80,7 +80,7 @@ exports.getStudentSummary = async (req, res) => {
         const alertsResult = await db.query(`
             SELECT id, message, is_read, created_at
             FROM alerts
-            WHERE user_id = $1
+            WHERE user_id = (SELECT id FROM users WHERE student_id = $1 LIMIT 1)
             ORDER BY created_at DESC LIMIT 10
         `, [studentId]);
 
