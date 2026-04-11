@@ -26,6 +26,17 @@ class MainLayout extends ConsumerStatefulWidget {
 class _MainLayoutState extends ConsumerState<MainLayout> {
   int _currentIndex = 0;
 
+  Widget _buildCurrentScreen(List<Widget> screens) {
+    return Stack(
+      children: screens.asMap().entries.map((entry) {
+        return Offstage(
+          offstage: _currentIndex != entry.key,
+          child: entry.value,
+        );
+      }).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final role = ref.watch(userRoleProvider);
@@ -224,10 +235,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           const SizedBox(width: 4),
         ],
       ),
-      body: IndexedStack(
-        index: _currentIndex,
-        children: screens,
-      ),
+      body: _buildCurrentScreen(screens),
       bottomNavigationBar: navItems.length > 1
           ? Container(
               decoration: BoxDecoration(
