@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../services/db/sqlite_service.dart';
 import '../../../../services/sync/sync_service.dart';
+import 'package:http/http.dart' as http;
+import '../../../../features/auth/repositories/auth_repository.dart';
+import '../../../../core/constants/app_constants.dart';
+import 'dart:convert';
 
 class ConflictLogsScreen extends ConsumerStatefulWidget {
   const ConflictLogsScreen({Key? key}) : super(key: key);
@@ -48,7 +52,11 @@ class _ConflictLogsScreenState extends ConsumerState<ConflictLogsScreen> {
                 setState(() => _isLoading = true);
                 _fetchData();
               },
-            )
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_forever, color: Colors.red),
+              onPressed: () => _showNukeDialog(context),
+            ),
           ],
           bottom: const TabBar(
             tabs: [
@@ -124,5 +132,73 @@ class _ConflictLogsScreenState extends ConsumerState<ConflictLogsScreen> {
             )
       ),
     );
+  }
+
+  Future<void> _showNukeDialog(BuildContext context) async {
+    final TextEditingController passwordController = TextEditingController();
+    
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('⚠️ NUKE CLOUD DB?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('This will instantly delete ALL students, parents, staff, fees, attendance, and marks from the LIVE PostgreSQL server.\n\nEnter Admin Password to confirm:'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: passwordController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true), 
+            child: const Text('NUKE IT', style: TextStyle(color: Colors.white))
+          ),
+        ]
+      )
+    );
+
+    if (confirm == true) {
+      final password = passwordController.text;
+      if (password.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password is required!')));
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Nuking remote database...')));
+      try {
+        final session = await ref.read(authRepositoryProvider).getSession();
+        final response = await http.post(
+          Uri.parse('${AppConstants.baseUrl}/admin/nuke-database'),
+          headers: {
+            'Authorization': 'Bearer ${session?.token}',
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode({'password': password}),
+        );
+        
+        if (response.statusCode == 200) {
+           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+             content: Text('SUCCESS: Remote cloud DB wiped! Please Clear App Data to reset the local database.'),
+             duration: Duration(seconds: 5),
+           ));
+        } else {
+           final error = jsonDecode(response.body)['message'] ?? 'Unknown error';
+           ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed: $error')));
+        }
+      } catch(e) {
+         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
   }
 }

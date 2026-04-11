@@ -226,12 +226,31 @@ exports.createStudentAccounts = async (req, res) => {
     }
 };
 
-// GET /api/admin/nuke-database
+// POST /api/admin/nuke-database
 exports.nukeDatabase = async (req, res) => {
     let client;
     try {
+        const { password } = req.body;
+        if (!password) {
+            return res.status(400).json({ status: 'error', message: 'Password is required to wipe the database.' });
+        }
+
+        const adminId = req.user.userId;
+
         client = await db.getClient();
         await client.query("BEGIN");
+
+        // Verify Admin Password
+        const adminResult = await client.query(`SELECT password_hash FROM users WHERE id = $1 AND role = 'admin'`, [adminId]);
+        if (adminResult.rows.length === 0) {
+            return res.status(401).json({ status: 'error', message: 'Unauthorized. You must be an admin to perform this action.' });
+        }
+        
+        const isMatch = await bcrypt.compare(password, adminResult.rows[0].password_hash);
+        if (!isMatch) {
+            return res.status(401).json({ status: 'error', message: 'Incorrect password.' });
+        }
+
         
         const safeDelete = async (table) => {
             try { await client.query(`DELETE FROM ${table}`); } 

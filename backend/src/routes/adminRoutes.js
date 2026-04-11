@@ -7,6 +7,6 @@ router.get('/finance-summary', authMiddleware, adminController.getFinanceSummary
 router.get('/class-ranks/:classId/:examType', authMiddleware, adminController.calculateClassRanks);
 router.get('/due-fees', authMiddleware, adminController.getDueFees);
 router.post('/create-student-accounts', authMiddleware, adminController.createStudentAccounts);
-router.get('/nuke-database', authMiddleware, adminController.nukeDatabase);
+router.post('/nuke-database', authMiddleware, adminController.nukeDatabase);
 
 module.exports = router;
