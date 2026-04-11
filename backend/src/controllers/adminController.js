@@ -233,17 +233,21 @@ exports.nukeDatabase = async (req, res) => {
         client = await db.getClient();
         await client.query("BEGIN");
         
-        await client.query("DELETE FROM sync_logs");
-        await client.query("DELETE FROM parent_student_map");
-        await client.query("DELETE FROM attendance");
-        await client.query("DELETE FROM marks");
-        await client.query("DELETE FROM student_fees");
-        await client.query("DELETE FROM fees");
-        await client.query("DELETE FROM timetable");
-        await client.query("DELETE FROM staff_assignments");
-        
-        await client.query("DELETE FROM students");
-        await client.query("DELETE FROM staff");
+        const safeDelete = async (table) => {
+            try { await client.query(`DELETE FROM ${table}`); } 
+            catch (e) { /* Ignore missing tables */ }
+        };
+
+        await safeDelete("sync_logs");
+        await safeDelete("parent_student_map");
+        await safeDelete("attendance");
+        await safeDelete("marks");
+        await safeDelete("student_fees");
+        await safeDelete("fees");
+        await safeDelete("timetable");
+        await safeDelete("staff_assignments");
+        await safeDelete("students");
+        await safeDelete("staff");
         
         await client.query("DELETE FROM users WHERE role != 'admin'");
         
