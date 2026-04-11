@@ -20,6 +20,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   int _selectedChildIndex = 0;
   Map<String, dynamic> _summary = {};
   Map<String, dynamic> _studentDetails = {};
+  String? _parentName;
   bool _isLoading = true;
 
   @override
@@ -45,7 +46,21 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         final data = jsonDecode(response.body);
         final children =
             List<Map<String, dynamic>>.from(data['children'] ?? []);
-        setState(() => _children = children);
+        setState(() {
+           _children = children;
+           // Attempt to derive Parent Name from session if stored, otherwise from first child
+           if (session.role == 'parent') {
+              // Usually the session object itself has basic info or we fetch from user table
+           }
+        });
+
+        // Fetch parent name from local DB for the header
+        final db = await SQLiteService().database;
+        final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
+        if (userRows.isNotEmpty) {
+           setState(() => _parentName = userRows.first['name']?.toString());
+        }
+
         if (children.isNotEmpty) {
           _loadStudentSummary(children[0]['id']);
         } else {
@@ -163,9 +178,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
             children: [
               // Header
               Text(
-                _children.isNotEmpty
-                    ? '${_children[_selectedChildIndex]['name'] ?? 'My Child'}\'s Dashboard'
-                    : "My Child's Dashboard",
+                _parentName != null ? '$_parentName\'s Dashboard' : "Parent Dashboard",
                 style: Theme.of(context)
                     .textTheme
                     .headlineSmall

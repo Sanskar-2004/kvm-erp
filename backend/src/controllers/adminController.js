@@ -142,8 +142,8 @@ exports.createStudentAccounts = async (req, res) => {
             if (user.role === 'student' && user.is_deleted === 1) {
                 // Revive the soft-deleted student account
                 await client.query(
-                    `UPDATE users SET password_hash = $1, is_deleted = 0, updated_at = CURRENT_TIMESTAMP::TEXT WHERE id = $2`,
-                    [hashedPassword, user.id]
+                    `UPDATE users SET password_hash = $1, student_id = $2, is_deleted = 0, updated_at = CURRENT_TIMESTAMP::TEXT WHERE id = $3`,
+                    [hashedPassword, student_id, user.id]
                 );
                 studentUserId = user.id;
             } else {
@@ -154,9 +154,9 @@ exports.createStudentAccounts = async (req, res) => {
         } else {
             // Insert fresh student
             const studentUserResult = await client.query(
-                `INSERT INTO users (name, email, password_hash, role)
-                 VALUES ($1, $2, $3, 'student') RETURNING id`,
-                [student_username, studentEmail, hashedPassword]
+                `INSERT INTO users (name, email, password_hash, role, student_id)
+                 VALUES ($1, $2, $3, 'student', $4) RETURNING id`,
+                [student_username, studentEmail, hashedPassword, student_id]
             );
             studentUserId = studentUserResult.rows[0].id;
         }

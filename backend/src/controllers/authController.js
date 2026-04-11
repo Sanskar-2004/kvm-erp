@@ -27,7 +27,7 @@ exports.login = async (req, res) => {
     const lookupEmail = email.includes('@') ? email : `${email}@kvm.edu`;
 
     try {
-        const result = await db.query(`SELECT id, password_hash, role FROM users WHERE email = $1`, [lookupEmail]);
+        const result = await db.query(`SELECT id, password_hash, role, student_id FROM users WHERE email = $1`, [lookupEmail]);
         if (result.rows.length === 0) {
             return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
@@ -39,10 +39,13 @@ exports.login = async (req, res) => {
             return res.status(401).json({ status: 'error', message: 'Invalid credentials' });
         }
 
-        const payload = { userId: user.id, role: user.role };
+        // For students, use their UUID as the userId in session so dashboard works natively
+        const effectiveUserId = (user.role === 'student' && user.student_id) ? user.student_id : user.id;
+
+        const payload = { userId: effectiveUserId, role: user.role, databaseId: user.id };
         const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-        res.json({ status: 'success', token, role: user.role, userId: user.id });
+        res.json({ status: 'success', token, role: user.role, userId: effectiveUserId });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
