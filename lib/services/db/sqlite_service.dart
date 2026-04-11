@@ -525,30 +525,37 @@ class SQLiteService {
     ''', [studentId]);
   }
 
-  Future<Map<String, dynamic>> getFeeAnalytics() async {
+  Future<Map<String, dynamic>> getFeeAnalytics({String? academicYear}) async {
     final db = await database;
 
     try {
+      String whereClause = 'is_deleted = 0';
+      List<dynamic> args = [];
+      if (academicYear != null) {
+        whereClause += ' AND academic_year = ?';
+        args.add(academicYear);
+      }
+
       final summary = await db.rawQuery('''
         SELECT 
           COALESCE(SUM(amount_due), 0) as expected,
           COALESCE(SUM(amount_paid), 0) as collected,
           COALESCE(SUM(amount_due - amount_paid), 0) as pending
         FROM student_fees
-        WHERE is_deleted = 0
-      ''');
+        WHERE $whereClause
+      ''', args);
 
       final paidCountRaw = await db.rawQuery('''
         SELECT COUNT(DISTINCT student_id) as count
         FROM student_fees 
-        WHERE is_deleted = 0 AND (status = 'PAID' OR (amount_due - amount_paid) <= 0)
-      ''');
+        WHERE $whereClause AND (status = 'PAID' OR (amount_due - amount_paid) <= 0)
+      ''', args);
 
       final dueCountRaw = await db.rawQuery('''
         SELECT COUNT(DISTINCT student_id) as count
         FROM student_fees 
-        WHERE is_deleted = 0 AND status != 'PAID' AND (amount_due - amount_paid) > 0
-      ''');
+        WHERE $whereClause AND status != 'PAID' AND (amount_due - amount_paid) > 0
+      ''', args);
 
       final expected = summary.isNotEmpty ? summary.first['expected'] : 0;
       final collected = summary.isNotEmpty ? summary.first['collected'] : 0;
@@ -563,19 +570,19 @@ class SQLiteService {
                COALESCE(s.name, 'Unknown') as student_name
         FROM student_fees sf
         LEFT JOIN students s ON s.id = sf.student_id
-        WHERE sf.is_deleted = 0 AND sf.amount_paid > 0
+        WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND sf.amount_paid > 0
         ORDER BY sf.paid_date DESC
         LIMIT 10
-      ''');
+      ''', academicYear != null ? [academicYear] : []);
 
       final dueStudentsList = await db.rawQuery('''
         SELECT sf.id, sf.amount_due as total_due, sf.created_at, sf.student_id, 
                COALESCE(s.name, 'Unknown') as student_name, s.class_id, s.phone
         FROM student_fees sf
         LEFT JOIN students s ON s.id = sf.student_id
-        WHERE sf.is_deleted = 0 AND sf.amount_due > 0 AND sf.status != 'PAID'
+        WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND sf.amount_due > 0 AND sf.status != 'PAID'
         ORDER BY sf.created_at ASC
-      ''');
+      ''', academicYear != null ? [academicYear] : []);
 
       return {
         "expected": expected,

@@ -20,7 +20,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   Map<String, dynamic> _summary = {};
   bool _isLoading = true;
   String _academicYear = '2026-2027';
-  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
+  final List<String> _yearOptions = AcademicUtils.academicYears;
 
   @override
   void initState() {

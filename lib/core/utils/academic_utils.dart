@@ -1,6 +1,15 @@
 class AcademicUtils {
   AcademicUtils._();
 
+  static const List<String> academicYears = [
+    '2022-2023',
+    '2023-2024',
+    '2024-2025',
+    '2025-2026',
+    '2026-2027',
+    '2027-2028'
+  ];
+
   /// Determines if a class is considered junior (e.g. Class 1-8).
   /// Customize the parsing logic based on exact school requirements.
   static bool isJuniorClass(String className) {

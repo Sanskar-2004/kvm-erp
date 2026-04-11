@@ -7,6 +7,7 @@ import '../../../core/constants/class_constants.dart';
 import '../../../services/db/sqlite_service.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../fees/providers/fee_analytics_provider.dart';
+import '../../../core/utils/academic_utils.dart';
 import 'student_fee_detail_screen.dart';
 
 class AccountantDashboard extends ConsumerStatefulWidget {
@@ -35,6 +36,7 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
   // Class filter
   String _selectedClass = 'All';
+  String _selectedYear = '2026-2027';
   List<String> _classes = List<String>.from(ClassConstants.allClassesWithAll);
 
   static const _monthNames = [
@@ -138,7 +140,7 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
       // By using ref.refresh, we FORCE the provider to bypass cache and query SQLite again, 
       // ensuring immediately fresh data after a sync occurs.
-      final finance = await ref.refresh(feeAnalyticsProvider.future);
+      final finance = await ref.refresh(feeAnalyticsProvider(_selectedYear).future);
 
       setState(() {
         _yearly = {
@@ -424,6 +426,36 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Fee Performance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedYear,
+                            icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                            style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.bold),
+                            items: AcademicUtils.academicYears.map((y) => DropdownMenuItem(value: y, child: Text(y))).toList(),
+                            onChanged: (v) {
+                              if (v != null) {
+                                setState(() => _selectedYear = v);
+                                _loadFeesOverview();
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   // ── Summary Cards ──
                   Row(children: [
                     Expanded(

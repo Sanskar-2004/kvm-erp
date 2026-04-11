@@ -79,10 +79,16 @@ exports.generateFees = async (req, res) => {
             if (records.length > 12) break;
         }
 
+        const totalResult = await db.query(
+            'SELECT COUNT(*) FROM student_fees WHERE student_id = $1 AND academic_year = $2',
+            [studentId, academic_year]
+        );
+
         res.json({
             status: 'success',
-            message: `Generated ${records.length} fee records`,
-            fees: records
+            message: `Generated ${records.length} new fee records. Total records for ${academic_year}: ${totalResult.rows[0].count}`,
+            total_records: totalResult.rows[0].count,
+            new_records: records.length
         });
     } catch (e) {
         console.error('[Generate Fees Error]', e);

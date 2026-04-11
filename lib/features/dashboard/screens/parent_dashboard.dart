@@ -23,7 +23,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   String? _parentName;
   bool _isLoading = true;
   String _academicYear = '2026-2027';
-  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
+  final List<String> _yearOptions = AcademicUtils.academicYears;
 
   @override
   void initState() {

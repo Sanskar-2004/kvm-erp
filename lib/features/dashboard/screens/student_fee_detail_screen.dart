@@ -23,11 +23,11 @@ class StudentFeeDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen> {
-  List<Map<String, dynamic>> _fees = [];
+  Map<String, dynamic> _summary = {};
   bool _isLoading = true;
   String _academicYear = '2026-2027';
 
-  final List<String> _yearOptions = ['2024-2025', '2025-2026', '2026-2027', '2027-2028'];
+  final List<String> _yearOptions = AcademicUtils.academicYears;
 
   static const _monthNames = [
     'January', 'February', 'March', 'April', 'May', 'June',
@@ -546,13 +546,14 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
       );
 
       if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
         // Trigger a background sync pull immediately so local SQLite has the new rows
         await ref.read(syncServiceProvider).runSyncSafe();
         _loadFees();
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text('Fee records generated and synced ✅'),
-            backgroundColor: Colors.green[700],
+            content: Text(data['message'] ?? 'Fee records generated and synced ✅'),
+            backgroundColor: Colors.teal,
             behavior: SnackBarBehavior.floating,
           ));
         }
