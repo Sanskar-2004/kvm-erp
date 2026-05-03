@@ -9,6 +9,7 @@ import '../../auth/repositories/auth_repository.dart';
 import '../../fees/providers/fee_analytics_provider.dart';
 import '../../../core/utils/academic_utils.dart';
 import 'student_fee_detail_screen.dart';
+import '../../notices/screens/notices_screen.dart';
 
 class AccountantDashboard extends ConsumerStatefulWidget {
   const AccountantDashboard({Key? key}) : super(key: key);
@@ -57,15 +58,20 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-    // Load students + sync fees first, THEN compute analytics so SQLite is populated
-    _loadStudentsAndFees();
+    _tabController = TabController(length: 3, vsync: this, initialIndex: 0);
+    _loadLocalFirst();
   }
 
-  /// Runs student sync (which also persists student_fees), then loads fee analytics.
-  Future<void> _loadStudentsAndFees() async {
-    await _loadStudents();
+  /// 1. Load from local SQLite instantly
+  /// 2. If empty, show loading and fetch from network
+  /// 3. Either way, sync in background and refresh
+  Future<void> _loadLocalFirst() async {
+    // Step 1: Try loading students from local SQLite (instant)
+    await _loadStudentsFromLocal();
+    // Step 2: Load fees from local SQLite (instant)
     await _loadFeesOverview();
+    // Step 3: Sync from server in background, then refresh
+    _syncInBackground();
   }
 
   @override
@@ -81,8 +87,34 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     return double.tryParse(v.toString()) ?? 0;
   }
 
-  Future<void> _loadStudents() async {
+  /// Load students from local SQLite (fast, offline-safe)
+  Future<void> _loadStudentsFromLocal() async {
     setState(() => _isLoading = true);
+    try {
+      final db = await SQLiteService().database;
+      final localStudents = await db.query(
+        'students',
+        where: 'is_deleted = 0 AND (status = ? OR status IS NULL)',
+        whereArgs: ['approved'],
+        orderBy: 'name ASC',
+      );
+
+      if (localStudents.isNotEmpty) {
+        final sortedClasses = ClassConstants.allClasses;
+        setState(() {
+          _students = localStudents.map((s) => Map<String, dynamic>.from(s)).toList();
+          _classes = ['All', ...sortedClasses];
+        });
+      }
+    } catch (e) {
+      debugPrint('Local students load error: $e');
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Background HTTP sync — fetches latest data from server, updates SQLite, then refreshes UI
+  void _syncInBackground() async {
     try {
       final session = await ref.read(authRepositoryProvider).getSession();
       if (session == null) return;
@@ -90,7 +122,7 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
       final response = await http.get(
         Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
         headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -99,36 +131,26 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 .where((s) => s['is_deleted'] != 1)
                 .toList();
 
-        // ── Persist student_fees from sync response to SQLite ──
-        // This ensures the local analytics & fees_screen queries find real data.
+        // Persist student_fees from sync response to SQLite
         final rawFees =
             List<Map<String, dynamic>>.from(data['data']['student_fees'] ?? []);
         if (rawFees.isNotEmpty) {
           await SQLiteService().upsertStudentFees(rawFees);
-          debugPrint('[Sync] Upserted ${rawFees.length} student_fees rows to SQLite');
         }
 
-        // Extract unique classes - handle both numeric and string class IDs
-        final classSet = <String>{'All'};
-        for (final s in students) {
-          final classId = s['class_id']?.toString();
-          if (classId != null && classId.isNotEmpty) {
-            classSet.add(classId);
-          }
-        }
-
-        // Merge dynamic classes with canonical list so ALL classes always show
         final sortedClasses = ClassConstants.allClasses;
 
-        setState(() {
-          _students = students;
-          _classes = ['All', ...sortedClasses];
-        });
+        if (mounted) {
+          setState(() {
+            _students = students;
+            _classes = ['All', ...sortedClasses];
+          });
+          // Refresh fee analytics with newly synced data
+          await _loadFeesOverview();
+        }
       }
     } catch (e) {
-      debugPrint('Load students error: $e');
-    } finally {
-      setState(() => _isLoading = false);
+      debugPrint('Background sync error (will use cached data): $e');
     }
   }
 
@@ -232,8 +254,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
             dividerColor: Colors.transparent,
             tabs: const [
-              Tab(text: '  Students  '),
               Tab(text: '  Fees Overview  '),
+              Tab(text: '  Students  '),
+              Tab(text: '  Notices  '),
             ],
           ),
         ),
@@ -242,8 +265,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
           child: TabBarView(
             controller: _tabController,
             children: [
-              _buildStudentsTab(),
               _buildFeesOverviewTab(),
+              _buildStudentsTab(),
+              _buildNoticesTab(),
             ],
           ),
         ),
@@ -740,6 +764,11 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
               ),
             ),
           );
+  }
+
+  // ── TAB 3: Notices ──
+  Widget _buildNoticesTab() {
+    return const NoticesScreen(canCreate: true);
   }
 
   Widget _statCard(String title, String value, IconData icon, Color color) {

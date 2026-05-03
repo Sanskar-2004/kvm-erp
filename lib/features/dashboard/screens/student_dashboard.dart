@@ -7,6 +7,7 @@ import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
 import '../../../services/db/sqlite_service.dart';
 import '../../../services/sync/sync_service.dart';
+import '../../notices/screens/notices_screen.dart';
 
 class StudentDashboard extends ConsumerStatefulWidget {
   const StudentDashboard({Key? key}) : super(key: key);
@@ -36,49 +37,91 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
       return;
     }
 
+    final studentId = session.userId.toString();
+
     try {
-      // 1. Fully synchronize natively via SyncService (background fail-safe)
-      try {
-        await ref.read(syncServiceProvider).runSyncSafe();
-      } catch (syncErr) {
-        debugPrint('Student dashboard sync error (offline?): $syncErr');
+      // 1. Load from local SQLite FIRST (instant, offline-safe)
+      final db = await SQLiteService().database;
+      final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
+      
+      bool hasLocalData = studentRows.isNotEmpty;
+      
+      if (hasLocalData) {
+        setState(() => _student = Map<String, dynamic>.from(studentRows.first));
       }
 
-      final studentId = session.userId.toString();
+      // 2. Load summary from local SQLite (instant)
+      final accurateId = _student['id']?.toString() ?? studentId;
+      final localSummary = await SQLiteService().getStudentSummary(accurateId, academicYear: _academicYear);
+      
+      if (hasLocalData) {
+        setState(() {
+          _summary = localSummary;
+          _isLoading = false; // Show UI immediately with local data
+        });
+      }
 
-      // 2. Fetch student profile directly from locally synced SQLite 
+      // 3. Sync in background (non-blocking)
+      _syncAndRefresh(session, studentId, hasLocalData);
+
+    } catch (e) {
+      debugPrint('Load student data error: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  /// Background sync — if local data exists, refresh silently. If no local data, wait for sync then show.
+  void _syncAndRefresh(dynamic session, String studentId, bool hadLocalData) async {
+    try {
+      await ref.read(syncServiceProvider).runSyncSafe();
+    } catch (syncErr) {
+      debugPrint('Student dashboard sync error (offline?): $syncErr');
+    }
+
+    if (!mounted) return;
+
+    try {
+      // Re-query SQLite after sync to pick up any new data
       final db = await SQLiteService().database;
       final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
       
       if (studentRows.isNotEmpty) {
-        setState(() => _student = Map<String, dynamic>.from(studentRows.first));
-      } else {
-        // Fallback just in case SQLite hasn't finished merging
-        final fallbackResp = await http.get(
-          Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
-          headers: {'Authorization': 'Bearer ${session.token}'},
-        );
-        if (fallbackResp.statusCode == 200) {
-           final pullData = jsonDecode(fallbackResp.body);
-           final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
-           final match = students.where((s) => s['id'].toString() == studentId).toList();
-           if (match.isNotEmpty) {
-             setState(() => _student = match.first);
-           }
+        final accurateId = studentRows.first['id']?.toString() ?? studentId;
+        final freshSummary = await SQLiteService().getStudentSummary(accurateId, academicYear: _academicYear);
+        
+        if (mounted) {
+          setState(() {
+            _student = Map<String, dynamic>.from(studentRows.first);
+            _summary = freshSummary;
+            _isLoading = false;
+          });
         }
+      } else if (!hadLocalData) {
+        // First login fallback: try HTTP pull directly
+        try {
+          final fallbackResp = await http.get(
+            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+            headers: {'Authorization': 'Bearer ${session.token}'},
+          ).timeout(const Duration(seconds: 8));
+          if (fallbackResp.statusCode == 200) {
+            final pullData = jsonDecode(fallbackResp.body);
+            final students = List<Map<String, dynamic>>.from(pullData['data']['students'] ?? []);
+            final match = students.where((s) => s['id'].toString() == studentId).toList();
+            if (match.isNotEmpty && mounted) {
+              setState(() {
+                _student = match.first;
+                _isLoading = false;
+              });
+            }
+          }
+        } catch (e) {
+          debugPrint('HTTP fallback error: $e');
+        }
+        if (mounted) setState(() => _isLoading = false);
       }
-
-      // 3. Fetch aggregated summary securely from the synced SQLite Engine
-      final accurateId = _student['id']?.toString() ?? studentId;
-      final localSummary = await SQLiteService().getStudentSummary(accurateId, academicYear: _academicYear);
-
-      setState(() {
-        _summary = localSummary;
-        _isLoading = false;
-      });
     } catch (e) {
-      debugPrint('Load student data error: $e');
-      setState(() => _isLoading = false);
+      debugPrint('Post-sync refresh error: $e');
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -629,80 +672,9 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
   }
 
   void _showAlertsDetail() {
-    final alerts = List<Map<String, dynamic>>.from(_summary['alerts'] ?? []);
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (ctx, scrollCtrl) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(children: [
-            const Text('Notices & Alerts',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 12),
-            Expanded(
-              child: alerts.isEmpty
-                  ? Center(
-                      child: Text('No alerts',
-                          style: TextStyle(color: Colors.grey[400])))
-                  : ListView.builder(
-                      controller: scrollCtrl,
-                      itemCount: alerts.length,
-                      itemBuilder: (ctx, i) {
-                        final alert = alerts[i];
-                        final isRead = alert['is_read'] == true;
-
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: isRead
-                                ? Colors.grey.withOpacity(0.04)
-                                : Colors.orange.withOpacity(0.06),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: isRead
-                                    ? Colors.grey.withOpacity(0.1)
-                                    : Colors.orange.withOpacity(0.2)),
-                          ),
-                          child: Row(children: [
-                            Icon(
-                                isRead
-                                    ? Icons.check_circle_outline
-                                    : Icons.notifications_active_rounded,
-                                color: isRead ? Colors.grey : Colors.orange,
-                                size: 20),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(alert['message']?.toString() ?? '',
-                                        style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: isRead
-                                                ? FontWeight.normal
-                                                : FontWeight.w600)),
-                                    const SizedBox(height: 4),
-                                    Text(alert['created_at']?.toString() ?? '',
-                                        style: TextStyle(
-                                            fontSize: 10,
-                                            color: Colors.grey[400])),
-                                  ]),
-                            ),
-                          ]),
-                        );
-                      },
-                    ),
-            ),
-          ]),
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NoticesScreen(canCreate: false)),
     );
   }
 

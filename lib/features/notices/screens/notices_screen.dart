@@ -29,6 +29,30 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
     }
   }
 
+  /// Returns the allowed target audiences based on current user role
+  List<Map<String, String>> _getAllowedTargets() {
+    if (_userRole == 'admin') {
+      return [
+        {'label': 'All', 'value': 'all'},
+        {'label': 'Students', 'value': 'students'},
+        {'label': 'Parents', 'value': 'parents'},
+        {'label': 'Teachers', 'value': 'teachers'},
+        {'label': 'Accountants', 'value': 'accountants'},
+      ];
+    } else if (_userRole == 'teacher') {
+      return [
+        {'label': 'Students', 'value': 'students'},
+        {'label': 'Parents', 'value': 'parents'},
+      ];
+    } else if (_userRole == 'accountant') {
+      return [
+        {'label': 'Students', 'value': 'students'},
+        {'label': 'Parents', 'value': 'parents'},
+      ];
+    }
+    return [];
+  }
+
   @override
   Widget build(BuildContext context) {
     final noticesAsync = ref.watch(noticesListProvider);
@@ -66,8 +90,9 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             if (n.targetAudience == 'students' && _userRole == 'student') return true;
             if (n.targetAudience == 'parents' && _userRole == 'parent') return true;
             if (n.targetAudience == 'teachers' && _userRole == 'teacher') return true;
-            // Admin/accountant sees everything
-            if (_userRole == 'admin' || _userRole == 'accountant') return true;
+            if (n.targetAudience == 'accountants' && _userRole == 'accountant') return true;
+            // Admin sees everything
+            if (_userRole == 'admin') return true;
             return false;
           }).toList();
 
@@ -97,6 +122,7 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                 notice: notice,
                 canDelete: widget.canCreate,
                 onDelete: () => _deleteNotice(notice.id),
+                onTap: () => _showNoticeDetail(notice),
               );
             },
           );
@@ -108,7 +134,8 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
   void _showCreateNoticeDialog() {
     final titleCtrl = TextEditingController();
     final descCtrl = TextEditingController();
-    String target = 'all';
+    final allowedTargets = _getAllowedTargets();
+    String target = allowedTargets.isNotEmpty ? allowedTargets.first['value']! : 'all';
     bool isImportant = false;
 
     showModalBottomSheet(
@@ -125,6 +152,13 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('Send Notice', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                _userRole == 'admin'
+                    ? 'You can send to anyone'
+                    : 'You can send to students & parents',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
               const SizedBox(height: 16),
 
               // Title
@@ -155,17 +189,19 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
               ),
               const SizedBox(height: 12),
 
-              // Target audience
+              // Target audience — role-based
               const Text('Send to:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
               const SizedBox(height: 6),
               Wrap(
                 spacing: 8,
-                children: [
-                  _targetChip('All', 'all', target, (v) => setSheetState(() => target = v)),
-                  _targetChip('Students', 'students', target, (v) => setSheetState(() => target = v)),
-                  _targetChip('Parents', 'parents', target, (v) => setSheetState(() => target = v)),
-                  _targetChip('Teachers', 'teachers', target, (v) => setSheetState(() => target = v)),
-                ],
+                children: allowedTargets.map((t) {
+                  return _targetChip(
+                    t['label']!,
+                    t['value']!,
+                    target,
+                    (v) => setSheetState(() => target = v),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 12),
 
@@ -285,6 +321,134 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
       ref.invalidate(noticesListProvider);
     } catch (_) {}
   }
+
+  /// Shows full detail of a notice in a bottom sheet
+  void _showNoticeDetail(NoticeModel notice) {
+    final audienceColor = switch (notice.targetAudience) {
+      'all' => Colors.blue,
+      'students' => Colors.purple,
+      'parents' => Colors.green,
+      'teachers' => Colors.orange,
+      'accountants' => Colors.teal,
+      _ => Colors.grey,
+    };
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => DraggableScrollableSheet(
+        initialChildSize: 0.55,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scrollCtrl) => SingleChildScrollView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header badges
+              Row(
+                children: [
+                  if (notice.isImportant)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      margin: const EdgeInsets.only(right: 8),
+                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(6)),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.priority_high_rounded, size: 12, color: Colors.white),
+                          SizedBox(width: 4),
+                          Text('IMPORTANT', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                    ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: audienceColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: audienceColor.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      'To: ${notice.targetAudience.toUpperCase()}',
+                      style: TextStyle(color: audienceColor, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Title
+              Text(
+                notice.title,
+                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
+
+              // Description
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.withOpacity(0.1)),
+                ),
+                child: Text(
+                  notice.description,
+                  style: TextStyle(fontSize: 14, height: 1.5, color: Colors.grey[800]),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Meta info
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurple.withOpacity(0.04),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.deepPurple.withOpacity(0.1)),
+                ),
+                child: Column(
+                  children: [
+                    _metaRow(Icons.person_rounded, 'Posted by', notice.postedBy),
+                    const Divider(height: 16),
+                    _metaRow(Icons.calendar_today_rounded, 'Date',
+                        '${notice.postedAt.day}/${notice.postedAt.month}/${notice.postedAt.year} at ${notice.postedAt.hour.toString().padLeft(2, '0')}:${notice.postedAt.minute.toString().padLeft(2, '0')}'),
+                    const Divider(height: 16),
+                    _metaRow(Icons.groups_rounded, 'Audience', notice.targetAudience.toUpperCase()),
+                    if (notice.expiresAt != null) ...[
+                      const Divider(height: 16),
+                      _metaRow(Icons.timer_off_rounded, 'Expires',
+                          '${notice.expiresAt!.day}/${notice.expiresAt!.month}/${notice.expiresAt!.year}'),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _metaRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: Colors.deepPurple[300]),
+        const SizedBox(width: 10),
+        Text('$label: ', style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+        Expanded(
+          child: Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
 }
 
 // ── Notice Card ──
@@ -292,8 +456,9 @@ class _NoticeCard extends StatelessWidget {
   final NoticeModel notice;
   final bool canDelete;
   final VoidCallback onDelete;
+  final VoidCallback onTap;
 
-  const _NoticeCard({required this.notice, required this.canDelete, required this.onDelete});
+  const _NoticeCard({required this.notice, required this.canDelete, required this.onDelete, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -302,71 +467,82 @@ class _NoticeCard extends StatelessWidget {
       'students' => Colors.purple,
       'parents' => Colors.green,
       'teachers' => Colors.orange,
+      'accountants' => Colors.teal,
       _ => Colors.grey,
     };
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: notice.isImportant ? Colors.red.withOpacity(0.3) : Colors.grey.withOpacity(0.1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              if (notice.isImportant)
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: notice.isImportant ? Colors.red.withOpacity(0.3) : Colors.grey.withOpacity(0.1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                if (notice.isImportant)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    margin: const EdgeInsets.only(right: 6),
+                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                    child: const Text('IMPORTANT', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   margin: const EdgeInsets.only(right: 6),
-                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                  child: const Text('IMPORTANT', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold)),
+                  decoration: BoxDecoration(
+                    color: audienceColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    notice.targetAudience.toUpperCase(),
+                    style: TextStyle(color: audienceColor, fontSize: 9, fontWeight: FontWeight.bold),
+                  ),
                 ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                margin: const EdgeInsets.only(right: 6),
-                decoration: BoxDecoration(
-                  color: audienceColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
+                const Spacer(),
+                if (canDelete)
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(notice.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(height: 6),
+            Text(
+              notice.description,
+              style: TextStyle(color: Colors.grey[700], fontSize: 13),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.person_outline, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(notice.postedBy, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                const Spacer(),
+                Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                const SizedBox(width: 4),
+                Text(
+                  '${notice.postedAt.day}/${notice.postedAt.month}/${notice.postedAt.year}',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[500]),
                 ),
-                child: Text(
-                  notice.targetAudience.toUpperCase(),
-                  style: TextStyle(color: audienceColor, fontSize: 9, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const Spacer(),
-              if (canDelete)
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(notice.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-          const SizedBox(height: 6),
-          Text(notice.description, style: TextStyle(color: Colors.grey[700], fontSize: 13)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.person_outline, size: 14, color: Colors.grey[500]),
-              const SizedBox(width: 4),
-              Text(notice.postedBy, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-              const Spacer(),
-              Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
-              const SizedBox(width: 4),
-              Text(
-                '${notice.postedAt.day}/${notice.postedAt.month}/${notice.postedAt.year}',
-                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 8),
+                Icon(Icons.chevron_right_rounded, size: 16, color: Colors.grey[400]),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

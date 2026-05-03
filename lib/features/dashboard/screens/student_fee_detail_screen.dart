@@ -283,6 +283,14 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadFees),
         ],
       ),
+      // FAB always visible — generate fees for any year, even if records exist
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _generateFees,
+        icon: const Icon(Icons.add_rounded),
+        label: const Text('Generate Fees'),
+        backgroundColor: Colors.teal,
+        foregroundColor: Colors.white,
+      ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _fees.isEmpty
@@ -293,13 +301,8 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
                       Icon(Icons.receipt_long, size: 56, color: Colors.grey[300]),
                       const SizedBox(height: 12),
                       Text('No fee records for $_academicYear', style: TextStyle(color: Colors.grey[500])),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: _generateFees,
-                        icon: const Icon(Icons.add),
-                        label: const Text('Generate Fee Records'),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white),
-                      ),
+                      const SizedBox(height: 8),
+                      Text('Tap the button below to generate', style: TextStyle(color: Colors.grey[400], fontSize: 12)),
                     ],
                   ),
                 )
@@ -370,14 +373,14 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: Text('Month-wise Breakdown',
+                        child: Text('Month-wise Breakdown • Tap to record payment',
                             style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: Colors.grey[700])),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Expanded(
                       child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 80),
                         itemCount: _fees.length,
                         itemBuilder: (context, index) {
                           final fee = _fees[index];

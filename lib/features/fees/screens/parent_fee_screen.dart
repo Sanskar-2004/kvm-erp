@@ -3,11 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/academic_utils.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/db/sqlite_service.dart';
 import '../../../services/sync/sync_service.dart';
 
-/// Parent fee screen — shows expandable fee cards for each child
+/// Parent fee screen — shows expandable fee cards for each child, filtered by year
 class ParentFeeScreen extends ConsumerStatefulWidget {
   const ParentFeeScreen({super.key});
 
@@ -20,6 +21,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
   Map<String, Map<String, dynamic>> _childFees = {}; // childId -> fee summary
   Set<String> _expandedIds = {};
   bool _isLoading = true;
+  String _selectedYear = AcademicUtils.academicYears.last;
 
   @override
   void initState() {
@@ -36,14 +38,11 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
     }
 
     try {
-      // 1. Get children list
-      // Normally from parent_student_map or remote. If we rely on pure local DB, we can just grab from DB or remote fallback.
-      // Parents might not have `parent_student_map` locally since it's phase 2, let's keep the remote fetch for the children list if needed
-      // BUT for Demo/robustness, we'll fetch from remote if possible, then local for fees.
+      // 1. Get children list — try API first, fall back to local phone matching
       final childResp = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
         headers: {'Authorization': 'Bearer ${session.token}'},
-      );
+      ).timeout(const Duration(seconds: 8));
 
       List<Map<String, dynamic>> children = [];
       if (childResp.statusCode == 200) {
@@ -51,7 +50,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
         children = List<Map<String, dynamic>>.from(data['children'] ?? []);
       }
 
-      // If no children linked remotely, match natively by phone!
+      // If no children linked remotely, match by phone locally
       if (children.isEmpty) {
         try {
            await ref.read(syncServiceProvider).runSyncSafe();
@@ -82,16 +81,18 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
 
       setState(() => _children = children);
 
-      // 2. Fetch fee summary for each child from LOCAL SQLite
+      // 2. Fetch fee summary for each child from LOCAL SQLite, filtered by year
+      _childFees = {};
       for (final child in children) {
         final childId = child['id']?.toString() ?? '';
         if (childId.isEmpty) continue;
 
         try {
-          final sData = await SQLiteService().getStudentSummary(childId);
-          setState(() {
-            _childFees[childId] = sData['fees'] ?? {};
-          });
+          final sData = await SQLiteService().getStudentSummary(
+            childId,
+            academicYear: _selectedYear,
+          );
+          _childFees[childId] = sData['fees'] ?? {};
         } catch (_) {}
       }
 
@@ -115,13 +116,44 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text("Children's Fees",
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    // Header with year selector
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("Children's Fees",
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedYear,
+                              icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                              style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.bold),
+                              items: AcademicUtils.academicYears
+                                  .map((y) => DropdownMenuItem(value: y, child: Text(y)))
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _selectedYear = v);
+                                  _loadChildrenFees();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
-                    Text('Tap any child to expand details',
+                    Text('Tap any child to expand • $_selectedYear',
                         style:
                             TextStyle(color: Colors.grey[400], fontSize: 12)),
                     const SizedBox(height: 16),
@@ -184,7 +216,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
                           ),
                           child: Column(
                             children: [
-                              // ── Header (always visible) ──
+                              // Header (always visible)
                               InkWell(
                                 onTap: () {
                                   setState(() {
@@ -227,7 +259,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
                                                     fontWeight: FontWeight.bold,
                                                     fontSize: 16)),
                                             const SizedBox(height: 2),
-                                            Text('Class $classId',
+                                            Text('Class $classId • $_selectedYear',
                                                 style: TextStyle(
                                                     fontSize: 12,
                                                     color: Colors.grey[500])),
@@ -257,7 +289,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
                                             ),
                                             child: Text(
                                                 isPaid
-                                                    ? 'PAID'
+                                                    ? totalDue > 0 ? 'PAID' : 'NO FEE'
                                                     : '₹${remaining.toStringAsFixed(0)} due',
                                                 style: TextStyle(
                                                     fontSize: 10,
@@ -280,7 +312,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
                                 ),
                               ),
 
-                              // ── Expanded Details ──
+                              // Expanded Details
                               if (isExpanded)
                                 Container(
                                   padding:

@@ -7,6 +7,7 @@ import '../../auth/repositories/auth_repository.dart';
 import '../../../core/utils/academic_utils.dart';
 import '../../../services/db/sqlite_service.dart';
 import '../../../services/sync/sync_service.dart';
+import '../../notices/screens/notices_screen.dart';
 
 class ParentDashboard extends ConsumerStatefulWidget {
   const ParentDashboard({Key? key}) : super(key: key);
@@ -39,93 +40,105 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     }
 
     try {
-      final response = await http.get(
-        Uri.parse('$BASE_URL/parent/children/${session.userId}'),
-        headers: {'Authorization': 'Bearer ${session.token}'},
-      ).timeout(const Duration(seconds: 10));
+      // 1. Try loading from local SQLite first (instant, offline-safe)
+      final db = await SQLiteService().database;
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final children =
-            List<Map<String, dynamic>>.from(data['children'] ?? []);
+      // Fetch parent name from local DB
+      final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
+      if (userRows.isNotEmpty && mounted) {
+        setState(() => _parentName = userRows.first['name']?.toString());
+      }
+
+      // Try phone-matching locally first
+      String? parentContact;
+      if (userRows.isNotEmpty) {
+        parentContact = userRows.first['username']?.toString();
+        if (parentContact == null || parentContact.isEmpty) {
+          parentContact = userRows.first['email']?.toString();
+        }
+      }
+
+      List<Map<String, Object?>> matchedStudents = [];
+      if (parentContact != null && parentContact.trim().isNotEmpty) {
+        matchedStudents = await db.query(
+          'students',
+          where: 'is_deleted = 0 AND (parent_phone = ? OR phone = ? OR email = ?)',
+          whereArgs: [parentContact, parentContact, parentContact],
+        );
+      }
+
+      if (matchedStudents.isNotEmpty) {
+        // Local data found — show instantly
         setState(() {
-           _children = children;
-           // Attempt to derive Parent Name from session if stored, otherwise from first child
-           if (session.role == 'parent') {
-              // Usually the session object itself has basic info or we fetch from user table
-           }
+          _children = matchedStudents.map((s) => {
+            'id': s['id'].toString(),
+            'name': s['name'].toString(),
+            'class_id': s['class_id'].toString(),
+          }).toList();
         });
+        _loadStudentSummary(matchedStudents.first['id'].toString());
+        // Background: try API to see if there are newer children
+        _syncChildrenInBackground(session);
+        return;
+      }
 
-        // Fetch parent name from local DB for the header
-        final db = await SQLiteService().database;
-        final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
-        if (userRows.isNotEmpty) {
-           setState(() => _parentName = userRows.first['name']?.toString());
+      // 2. No local data — try API (first login scenario)
+      try {
+        final response = await http.get(
+          Uri.parse('$BASE_URL/parent/children/${session.userId}'),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        ).timeout(const Duration(seconds: 8));
+
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+          setState(() => _children = children);
+
+          if (children.isNotEmpty) {
+            _loadStudentSummary(children[0]['id']);
+            return;
+          }
         }
+      } catch (e) {
+        debugPrint('API children fetch error: $e');
+      }
 
-        if (children.isNotEmpty) {
-          _loadStudentSummary(children[0]['id']);
-        } else {
-          // No linked children natively on the backend — let's magically match by phone!
-          try {
-             await ref.read(syncServiceProvider).runSyncSafe();
-          } catch (_) {}
+      // 3. Still no children — try sync + local matching as last resort
+      try {
+        await ref.read(syncServiceProvider).runSyncSafe();
+      } catch (_) {}
 
-          final db = await SQLiteService().database;
+      if (parentContact != null && parentContact.trim().isNotEmpty) {
+        matchedStudents = await db.query(
+          'students',
+          where: 'is_deleted = 0 AND (parent_phone = ? OR phone = ? OR email = ?)',
+          whereArgs: [parentContact, parentContact, parentContact],
+        );
+      }
 
-          // 1. Fetch current parent's phone/username
-          final userRows = await db.query('users', where: 'id = ?', whereArgs: [session.userId]);
-          String? parentContact;
-          if (userRows.isNotEmpty) {
-             parentContact = userRows.first['username']?.toString();
-             if (parentContact == null || parentContact.isEmpty) {
-                 parentContact = userRows.first['email']?.toString();
-             }
-          }
-
-          List<Map<String, Object?>> matchedStudents = [];
-          
-          if (parentContact != null && parentContact.trim().isNotEmpty) {
-             // 2. Fetch all valid students that share this exact phone number!
-             matchedStudents = await db.query(
-                'students', 
-                where: 'is_deleted = 0 AND (parent_phone = ? OR phone = ? OR email = ?)', 
-                whereArgs: [parentContact, parentContact, parentContact]
-             );
-          }
-
-          // 3. Populate dashboard safely
-          if (matchedStudents.isNotEmpty) {
-             setState(() {
-                _children = matchedStudents.map((s) => {
-                   'id': s['id'].toString(),
-                   'name': s['name'].toString(),
-                   'class_id': s['class_id'].toString(),
-                }).toList();
-             });
-             _loadStudentSummary(matchedStudents.first['id'].toString());
-          } else {
-             // Absolutely no children match. Don't show random students like "sd"
-             setState(() {
-                _children = [
-                   {'id': 'demo123', 'name': 'No Child Linked', 'class_id': '-'}
-                ];
-                _isLoading = false; 
-             });
-             // Empty mock summary so the fee tiles load gracefully as cleared
-             setState(() {
-                _summary = {
-                   'attendance': {'percentage': '0'},
-                   'fees': {'total_due': 0, 'total_paid': 0},
-                   'marks': [],
-                   'alerts': []
-                };
-             });
-          }
-          return;
-        }
+      if (matchedStudents.isNotEmpty) {
+        setState(() {
+          _children = matchedStudents.map((s) => {
+            'id': s['id'].toString(),
+            'name': s['name'].toString(),
+            'class_id': s['class_id'].toString(),
+          }).toList();
+        });
+        _loadStudentSummary(matchedStudents.first['id'].toString());
       } else {
-        setState(() => _isLoading = false);
+        // No children found anywhere
+        setState(() {
+          _children = [
+            {'id': 'demo123', 'name': 'No Child Linked', 'class_id': '-'}
+          ];
+          _isLoading = false;
+          _summary = {
+            'attendance': {'percentage': '0'},
+            'fees': {'total_due': 0, 'total_paid': 0},
+            'marks': [],
+            'alerts': []
+          };
+        });
       }
     } catch (e) {
       debugPrint('Load children error: $e');
@@ -133,36 +146,78 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
     }
   }
 
+  /// Background sync to refresh children list silently
+  void _syncChildrenInBackground(dynamic session) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$BASE_URL/parent/children/${session.userId}'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      ).timeout(const Duration(seconds: 8));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+        if (children.isNotEmpty && mounted) {
+          setState(() => _children = children);
+        }
+      }
+    } catch (_) {}
+  }
+
   Future<void> _loadStudentSummary(String studentId) async {
     setState(() => _isLoading = true);
-    final session = await ref.read(authRepositoryProvider).getSession();
-    if (session == null) return;
 
     try {
-      // 1. Run global background sync fully native locally
-      try {
-        await ref.read(syncServiceProvider).runSyncSafe();
-      } catch (syncErr) {
-        debugPrint('Parent dashboard sync error (offline?): $syncErr');
-      }
-
-      // 2. Fetch comprehensive summary securely from SQLite
+      // 1. Load from local SQLite FIRST (instant)
       final localSummary = await SQLiteService().getStudentSummary(studentId, academicYear: _academicYear);
-      setState(() => _summary = localSummary);
-
-      // 3. Fetch detailed student profile directly from SQLite 
+      
+      // 2. Load student details from local SQLite
       final db = await SQLiteService().database;
       final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
-      
+
       if (studentRows.isNotEmpty) {
-        setState(() => _studentDetails = Map<String, dynamic>.from(studentRows.first));
+        setState(() {
+          _summary = localSummary;
+          _studentDetails = Map<String, dynamic>.from(studentRows.first);
+          _isLoading = false; // Show immediately
+        });
       } else {
-        final child = _children.isNotEmpty ? _children[_selectedChildIndex] : <String, dynamic>{};
-        setState(() => _studentDetails = Map<String, dynamic>.from(child));
+        setState(() => _summary = localSummary);
       }
+
+      // 3. Sync in background and refresh silently
+      _syncSummaryInBackground(studentId);
+
     } catch (e) {
       debugPrint('Summary error: $e');
-    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  /// Background sync for student summary
+  void _syncSummaryInBackground(String studentId) async {
+    try {
+      await ref.read(syncServiceProvider).runSyncSafe();
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    try {
+      final freshSummary = await SQLiteService().getStudentSummary(studentId, academicYear: _academicYear);
+      final db = await SQLiteService().database;
+      final studentRows = await db.query('students', where: 'id = ?', whereArgs: [studentId]);
+
+      if (mounted) {
+        setState(() {
+          _summary = freshSummary;
+          if (studentRows.isNotEmpty) {
+            _studentDetails = Map<String, dynamic>.from(studentRows.first);
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Background summary sync error: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -799,91 +854,9 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   }
 
   void _showAlertsDetail() {
-    final alerts = List<Map<String, dynamic>>.from(_summary['alerts'] ?? []);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
-        maxChildSize: 0.8,
-        expand: false,
-        builder: (ctx, scrollCtrl) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const Text('Notices & Alerts',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              Expanded(
-                child: alerts.isEmpty
-                    ? Center(
-                        child: Text('No alerts',
-                            style: TextStyle(color: Colors.grey[400])))
-                    : ListView.builder(
-                        controller: scrollCtrl,
-                        itemCount: alerts.length,
-                        itemBuilder: (ctx, i) {
-                          final alert = alerts[i];
-                          final isRead = alert['is_read'] == true;
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: isRead
-                                  ? Colors.grey.withOpacity(0.04)
-                                  : Colors.orange.withOpacity(0.06),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                  color: isRead
-                                      ? Colors.grey.withOpacity(0.1)
-                                      : Colors.orange.withOpacity(0.2)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  isRead
-                                      ? Icons.check_circle_outline
-                                      : Icons.notifications_active_rounded,
-                                  color: isRead ? Colors.grey : Colors.orange,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(alert['message']?.toString() ?? '',
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            fontWeight: isRead
-                                                ? FontWeight.normal
-                                                : FontWeight.w600,
-                                          )),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                          alert['created_at']?.toString() ?? '',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey[400])),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const NoticesScreen(canCreate: false)),
     );
   }
 

@@ -7,7 +7,9 @@ import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
+import '../../../core/utils/academic_utils.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../dashboard/screens/student_fee_detail_screen.dart';
 
 class FeesScreen extends ConsumerStatefulWidget {
   const FeesScreen({super.key});
@@ -18,7 +20,8 @@ class FeesScreen extends ConsumerStatefulWidget {
 
 class _FeesScreenState extends ConsumerState<FeesScreen> {
   String _selectedClass = 'All';
-  String _selectedStatus = 'All'; // All, Paid, Due, Overdue
+  String _selectedStatus = 'All'; // All, Paid, Due
+  String _selectedYear = AcademicUtils.academicYears.last; // Default to current year
   Map<String, Map<String, dynamic>> _feeMap = {}; // studentId -> fee summary
   bool _isLoading = true;
 
@@ -31,33 +34,30 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
   }
 
   Future<void> _loadFeeData() async {
+    setState(() => _isLoading = true);
     try {
-      // ── Step 1: Pull student_fees from the backend and persist to SQLite ──
-      // Fees are created by the accountant on the server; they only land in
-      // local SQLite after an explicit sync pull.
+      // Step 1: Try to sync fees from backend (background-safe)
       try {
         final session = await ref.read(authRepositoryProvider).getSession();
         if (session != null) {
           final response = await http.get(
             Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
             headers: {'Authorization': 'Bearer ${session.token}'},
-          );
+          ).timeout(const Duration(seconds: 8));
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
             final rawFees = List<Map<String, dynamic>>.from(
                 data['data']['student_fees'] ?? []);
             if (rawFees.isNotEmpty) {
               await SQLiteService().upsertStudentFees(rawFees);
-              debugPrint('[FeesScreen] Synced ${rawFees.length} fee rows to SQLite');
             }
           }
         }
       } catch (syncError) {
         debugPrint('[FeesScreen] Sync pull failed (offline?): $syncError');
-        // Continue anyway — show whatever is already in SQLite
       }
 
-      // ── Step 2: Query local SQLite (now populated) ──
+      // Step 2: Query local SQLite filtered by selected academic year
       final db = await SQLiteService().database;
       final fees = await db.rawQuery('''
         SELECT sf.student_id, s.name as student_name, s.class_id,
@@ -68,10 +68,10 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                sf.academic_year
         FROM student_fees sf
         LEFT JOIN students s ON s.id = sf.student_id
-        WHERE sf.is_deleted = 0
-        GROUP BY sf.student_id
+        WHERE sf.is_deleted = 0 AND sf.academic_year = ?
+        GROUP BY sf.student_id, sf.academic_year
         ORDER BY s.class_id ASC, s.name ASC
-      ''');
+      ''', [_selectedYear]);
 
       final map = <String, Map<String, dynamic>>{};
       for (var row in fees) {
@@ -134,7 +134,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
             return true;
           }).toList();
 
-          // Calculate totals
+          // Calculate totals for selected year
           double grandTotal = 0;
           double grandPaid = 0;
           for (var fee in _feeMap.values) {
@@ -154,9 +154,42 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                 ),
                 child: Column(
                   children: [
-                    // Class + Status filters
+                    // Year + Class + Status filters
                     Row(
                       children: [
+                        // Year dropdown
+                        Expanded(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<String>(
+                                value: _selectedYear,
+                                isExpanded: true,
+                                icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                                style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.bold),
+                                items: AcademicUtils.academicYears
+                                    .map((y) => DropdownMenuItem(
+                                          value: y,
+                                          child: Text(y),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() => _selectedYear = v);
+                                    _loadFeeData();
+                                  }
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // Class dropdown
                         Expanded(
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10),
@@ -188,30 +221,28 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                           ),
                         ),
                         const SizedBox(width: 8),
-                        Expanded(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border: Border.all(
-                                  color: Colors.grey.withOpacity(0.2)),
-                            ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<String>(
-                                value: _selectedStatus,
-                                isExpanded: true,
-                                items: ['All', 'Paid', 'Due']
-                                    .map((s) => DropdownMenuItem(
-                                          value: s,
-                                          child: Text(s,
-                                              style: const TextStyle(
-                                                  fontSize: 13)),
-                                        ))
-                                    .toList(),
-                                onChanged: (v) => setState(
-                                    () => _selectedStatus = v ?? 'All'),
-                              ),
+                        // Status dropdown
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: Colors.grey.withOpacity(0.2)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedStatus,
+                              items: ['All', 'Paid', 'Due']
+                                  .map((s) => DropdownMenuItem(
+                                        value: s,
+                                        child: Text(s,
+                                            style: const TextStyle(
+                                                fontSize: 13)),
+                                      ))
+                                  .toList(),
+                              onChanged: (v) => setState(
+                                  () => _selectedStatus = v ?? 'All'),
                             ),
                           ),
                         ),
@@ -254,16 +285,15 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
-                    Text('${students.length} Students',
+                    Text('${students.length} Students • $_selectedYear',
                         style: TextStyle(
                             fontWeight: FontWeight.w600,
                             color: Colors.grey[700],
                             fontSize: 13)),
                     const Spacer(),
-                    Icon(Icons.sort_rounded, size: 16, color: Colors.grey[400]),
-                    Text(' Class wise',
+                    Text('Tap to manage fees →',
                         style:
-                            TextStyle(color: Colors.grey[400], fontSize: 11)),
+                            TextStyle(color: Colors.teal[300], fontSize: 11)),
                   ],
                 ),
               ),
@@ -291,12 +321,9 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                     } else if (totalDue <= 0) {
                       status = 'PAID';
                       statusColor = Colors.green;
-                    } else if (totalDue > 0) {
+                    } else {
                       status = 'DUE';
                       statusColor = Colors.red;
-                    } else {
-                      status = 'PARTIAL';
-                      statusColor = Colors.orange;
                     }
 
                     return Container(
@@ -308,7 +335,21 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
                             Border.all(color: statusColor.withOpacity(0.15)),
                       ),
                       child: ListTile(
-                        onTap: () => _showStudentFeeDetail(student, fee),
+                        onTap: () async {
+                          // Navigate to full fee detail screen with edit capability
+                          await Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => StudentFeeDetailScreen(
+                                studentId: student.id,
+                                studentName: student.name,
+                                classId: student.classId,
+                              ),
+                            ),
+                          );
+                          // Refresh data after returning
+                          _loadFeeData();
+                        },
                         contentPadding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 4),
                         leading: CircleAvatar(
@@ -369,208 +410,6 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
     );
   }
 
-  void _showStudentFeeDetail(
-      StudentModel student, Map<String, dynamic>? feeSummary) async {
-    // Load detailed fee records from student_fees
-    List<Map<String, dynamic>> records = [];
-    try {
-      final db = await SQLiteService().database;
-      records = await db.query(
-        'student_fees',
-        where: 'student_id = ? AND is_deleted = 0',
-        whereArgs: [student.id],
-        orderBy: 'month ASC',
-      );
-    } catch (e) {
-      debugPrint('Fee detail error: $e');
-    }
-
-    final totalAmount = (feeSummary?['total_amount'] as num?)?.toDouble() ?? 0;
-    final totalPaid = (feeSummary?['total_paid'] as num?)?.toDouble() ?? 0;
-    final totalDue = totalAmount - totalPaid;
-
-    if (!mounted) return;
-
-    const monthNames = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        expand: false,
-        builder: (ctx, scrollCtrl) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              // Header
-              Row(
-                children: [
-                  CircleAvatar(
-                    backgroundColor: Colors.blue.withOpacity(0.1),
-                    child: Text(student.name[0],
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue[700])),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(student.name,
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(
-                            'Roll: ${student.rollNumber} • Class ${student.classId}',
-                            style: TextStyle(
-                                fontSize: 12, color: Colors.grey[500])),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Summary Card
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: totalDue > 0
-                      ? Colors.red.withOpacity(0.06)
-                      : Colors.green.withOpacity(0.06),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _detailStat('Total Fee',
-                            '₹${totalAmount.toStringAsFixed(0)}', Colors.blue),
-                        _detailStat('Paid', '₹${totalPaid.toStringAsFixed(0)}',
-                            Colors.green),
-                        _detailStat('Due', '₹${totalDue.toStringAsFixed(0)}',
-                            Colors.red),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: totalAmount > 0
-                            ? (totalPaid / totalAmount).clamp(0, 1)
-                            : 0,
-                        minHeight: 8,
-                        backgroundColor: Colors.grey[200],
-                        valueColor: AlwaysStoppedAnimation(
-                            totalPaid >= totalAmount
-                                ? Colors.green
-                                : Colors.orange),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              // Records
-              Expanded(
-                child: records.isEmpty
-                    ? Center(
-                        child: Text('No fee records',
-                            style: TextStyle(color: Colors.grey[400])))
-                    : ListView.builder(
-                        controller: scrollCtrl,
-                        itemCount: records.length,
-                        itemBuilder: (ctx, i) {
-                          final r = records[i];
-                          final status = (r['status']?.toString() ?? 'UNPAID').toUpperCase();
-                          final amountDue = (r['amount_due'] as num?)?.toDouble() ?? 0;
-                          final amountPaid = (r['amount_paid'] as num?)?.toDouble() ?? 0;
-                          final monthNum = (r['month'] as int?) ?? 0;
-                          final monthLabel = (monthNum >= 1 && monthNum <= 12)
-                              ? monthNames[monthNum - 1]
-                              : 'Month $monthNum';
-                          final sColor = status == 'PAID'
-                              ? Colors.green
-                              : status == 'PARTIAL'
-                                  ? Colors.orange
-                                  : Colors.red;
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 6),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(10),
-                              border:
-                                  Border.all(color: sColor.withOpacity(0.15)),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  status == 'PAID'
-                                      ? Icons.check_circle
-                                      : Icons.schedule,
-                                  color: sColor,
-                                  size: 18,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                          monthLabel,
-                                          style: const TextStyle(
-                                              fontWeight: FontWeight.w600,
-                                              fontSize: 12)),
-                                      Text(
-                                          r['paid_date'] != null
-                                              ? 'Paid: ${r['paid_date'].toString().split('T').first}'
-                                              : 'Not yet paid',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.grey[500])),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text('₹${amountDue.toStringAsFixed(0)}',
-                                        style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13)),
-                                    if (amountPaid > 0)
-                                      Text('Paid: ₹${amountPaid.toStringAsFixed(0)}',
-                                          style: TextStyle(
-                                              fontSize: 10,
-                                              color: Colors.green[600])),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _bannerStat(String label, String value) {
     return Column(
       children: [
@@ -582,18 +421,6 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
         Text(label,
             style:
                 TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)),
-      ],
-    );
-  }
-
-  Widget _detailStat(String label, String value, Color color) {
-    return Column(
-      children: [
-        Text(value,
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.bold, fontSize: 18)),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 11)),
       ],
     );
   }

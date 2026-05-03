@@ -515,14 +515,20 @@ class SQLiteService {
   }
 
   Future<List<Map<String, dynamic>>> getStudentFeeTransactions(
-      String studentId) async {
+      String studentId, {String? academicYear}) async {
     final db = await database;
-    return await db.rawQuery('''
-      SELECT month, amount_paid, paid_date, status, 'N/A' as payment_method
+    String query = '''
+      SELECT month, amount_paid, amount_due, paid_date, status, academic_year, 'N/A' as payment_method
       FROM student_fees
       WHERE student_id = ? AND is_deleted = 0
-      ORDER BY month DESC LIMIT 20
-    ''', [studentId]);
+    ''';
+    List<dynamic> args = [studentId];
+    if (academicYear != null) {
+      query += ' AND academic_year = ?';
+      args.add(academicYear);
+    }
+    query += ' ORDER BY month ASC LIMIT 20';
+    return await db.rawQuery(query, args);
   }
 
   Future<Map<String, dynamic>> getFeeAnalytics({String? academicYear}) async {

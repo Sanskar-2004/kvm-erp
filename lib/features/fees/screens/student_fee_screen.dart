@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/academic_utils.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/db/sqlite_service.dart';
 
@@ -19,6 +18,12 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
   List<Map<String, dynamic>> _transactions = [];
   bool _isLoading = true;
   String _studentName = 'Student';
+  String _selectedYear = AcademicUtils.academicYears.last;
+
+  static const _monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
 
   @override
   void initState() {
@@ -35,11 +40,16 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
     }
 
     try {
-      final summary = await SQLiteService().getStudentSummary(session.userId);
-      final txns =
-          await SQLiteService().getStudentFeeTransactions(session.userId);
+      final summary = await SQLiteService().getStudentSummary(
+        session.userId,
+        academicYear: _selectedYear,
+      );
+      final txns = await SQLiteService().getStudentFeeTransactions(
+        session.userId,
+        academicYear: _selectedYear,
+      );
 
-      // Student name can be pulled from local db if needed, or we just leave it contextually
+      // Student name from local db
       final db = SQLiteService();
       final studentCheck = await db.query('students',
           where: 'id = ?', whereArgs: [session.userId], limit: 1);
@@ -79,18 +89,49 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('My Fees',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    // Header with year selector
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('My Fees',
+                            style: Theme.of(context)
+                                .textTheme
+                                .headlineSmall
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.teal.withOpacity(0.3)),
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: _selectedYear,
+                              icon: const Icon(Icons.calendar_today, size: 14, color: Colors.teal),
+                              style: const TextStyle(fontSize: 12, color: Colors.teal, fontWeight: FontWeight.bold),
+                              items: AcademicUtils.academicYears
+                                  .map((y) => DropdownMenuItem(value: y, child: Text(y)))
+                                  .toList(),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => _selectedYear = v);
+                                  _loadMyFees();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text('Pull down to refresh',
                         style:
                             TextStyle(color: Colors.grey[400], fontSize: 12)),
                     const SizedBox(height: 16),
 
-                    // ── Summary Card ──
+                    // Summary Card
                     Container(
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
@@ -111,8 +152,8 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('Total Fee',
-                                      style: TextStyle(
+                                  Text('Total Fee • $_selectedYear',
+                                      style: const TextStyle(
                                           color: Colors.white70, fontSize: 12)),
                                   Text('₹${totalDue.toStringAsFixed(0)}',
                                       style: const TextStyle(
@@ -163,8 +204,8 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                     ),
                     const SizedBox(height: 24),
 
-                    // ── Transaction History ──
-                    Text('Payment History',
+                    // Payment History
+                    Text('Payment History • $_selectedYear',
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
@@ -180,7 +221,7 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                             Icon(Icons.receipt_long_rounded,
                                 size: 48, color: Colors.grey[300]),
                             const SizedBox(height: 8),
-                            Text('No payment records yet',
+                            Text('No fee records for $_selectedYear',
                                 style: TextStyle(color: Colors.grey[500])),
                           ],
                         ),
@@ -188,12 +229,17 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                     else
                       ...List.generate(_transactions.length, (i) {
                         final txn = _transactions[i];
-                        final amount = double.tryParse(
+                        final amountPaid = double.tryParse(
                                 txn['amount_paid']?.toString() ?? '0') ??
                             0;
-                        final month = txn['month']?.toString() ?? '-';
+                        final amountDue = double.tryParse(
+                                txn['amount_due']?.toString() ?? '0') ??
+                            0;
+                        final monthNum = (txn['month'] as int?) ?? 0;
+                        final monthLabel = (monthNum >= 1 && monthNum <= 12)
+                            ? _monthNames[monthNum - 1]
+                            : 'Month $monthNum';
                         final status = txn['status']?.toString() ?? 'UNPAID';
-                        final method = txn['payment_method']?.toString() ?? '-';
                         final date =
                             txn['paid_date']?.toString().split('T').first ??
                                 '-';
@@ -234,11 +280,11 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(month,
+                                    Text(monthLabel,
                                         style: const TextStyle(
                                             fontWeight: FontWeight.w600,
                                             fontSize: 14)),
-                                    Text('$method • $date',
+                                    Text(isPaid ? 'Paid: $date' : 'Not yet paid',
                                         style: TextStyle(
                                             fontSize: 11,
                                             color: Colors.grey[500])),
@@ -248,16 +294,20 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  Text('₹${amount.toStringAsFixed(0)}',
+                                  Text('₹${amountDue.toStringAsFixed(0)}',
                                       style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           fontSize: 15,
-                                          color: isPaid
-                                              ? Colors.green[700]
-                                              : Colors.red[700])),
+                                          color: Colors.grey[700])),
+                                  if (amountPaid > 0)
+                                    Text('Paid: ₹${amountPaid.toStringAsFixed(0)}',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green[600])),
                                   Text(status,
                                       style: TextStyle(
-                                          fontSize: 10,
+                                          fontSize: 9,
                                           fontWeight: FontWeight.bold,
                                           color: isPaid
                                               ? Colors.green
