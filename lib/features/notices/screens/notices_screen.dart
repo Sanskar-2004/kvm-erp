@@ -15,6 +15,7 @@ class NoticesScreen extends ConsumerStatefulWidget {
 
 class _NoticesScreenState extends ConsumerState<NoticesScreen> {
   String _userRole = '';
+  String _userId = '';
 
   @override
   void initState() {
@@ -25,7 +26,12 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
   Future<void> _loadRole() async {
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session != null && mounted) {
-      setState(() => _userRole = session.role);
+      setState(() {
+        _userRole = session.role;
+        _userId = session.userId;
+      });
+      // Re-trigger the provider now that role is loaded
+      ref.invalidate(noticesListProvider);
     }
   }
 
@@ -78,21 +84,34 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
               foregroundColor: Colors.white,
             )
           : null,
-      body: noticesAsync.when(
+      body: _userRole.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : noticesAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Error: $err')),
         data: (notices) {
           // Filter notices relevant to the user's role
           final filtered = notices.where((n) {
             if (n.isExpired) return false;
+            
+            // Admin sees everything
+            if (_userRole == 'admin') return true;
+            
+            // Everyone sees 'all' targeted notices
             if (n.targetAudience == 'all') return true;
-            if (n.targetAudience == _userRole) return true;
+            
+            // Users see notices targeted at their role
             if (n.targetAudience == 'students' && _userRole == 'student') return true;
             if (n.targetAudience == 'parents' && _userRole == 'parent') return true;
             if (n.targetAudience == 'teachers' && _userRole == 'teacher') return true;
             if (n.targetAudience == 'accountants' && _userRole == 'accountant') return true;
-            // Admin sees everything
-            if (_userRole == 'admin') return true;
+            
+            // Teachers & accountants also see notices THEY created
+            if (_userRole == 'teacher' || _userRole == 'accountant') {
+              final postedByRole = n.postedBy.toLowerCase();
+              if (postedByRole == _userRole) return true;
+            }
+            
             return false;
           }).toList();
 

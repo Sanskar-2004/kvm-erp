@@ -544,23 +544,26 @@ class SQLiteService {
 
       final summary = await db.rawQuery('''
         SELECT 
-          COALESCE(SUM(amount_due), 0) as expected,
-          COALESCE(SUM(amount_paid), 0) as collected,
-          COALESCE(SUM(amount_due - amount_paid), 0) as pending
-        FROM student_fees
-        WHERE $whereClause
+          COALESCE(SUM(sf.amount_due), 0) as expected,
+          COALESCE(SUM(sf.amount_paid), 0) as collected,
+          COALESCE(SUM(sf.amount_due - sf.amount_paid), 0) as pending
+        FROM student_fees sf
+        INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
+        WHERE sf.$whereClause
       ''', args);
 
       final paidCountRaw = await db.rawQuery('''
-        SELECT COUNT(DISTINCT student_id) as count
-        FROM student_fees 
-        WHERE $whereClause AND (status = 'PAID' OR (amount_due - amount_paid) <= 0)
+        SELECT COUNT(DISTINCT sf.student_id) as count
+        FROM student_fees sf
+        INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
+        WHERE sf.$whereClause AND (sf.status = 'PAID' OR (sf.amount_due - sf.amount_paid) <= 0)
       ''', args);
 
       final dueCountRaw = await db.rawQuery('''
-        SELECT COUNT(DISTINCT student_id) as count
-        FROM student_fees 
-        WHERE $whereClause AND status != 'PAID' AND (amount_due - amount_paid) > 0
+        SELECT COUNT(DISTINCT sf.student_id) as count
+        FROM student_fees sf
+        INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
+        WHERE sf.$whereClause AND sf.status != 'PAID' AND (sf.amount_due - sf.amount_paid) > 0
       ''', args);
 
       final expected = summary.isNotEmpty ? summary.first['expected'] : 0;
@@ -573,9 +576,9 @@ class SQLiteService {
 
       final transactions = await db.rawQuery('''
         SELECT sf.id, sf.amount_paid, sf.amount_due, sf.paid_date, sf.status, sf.month, 'N/A' as payment_method, 
-               COALESCE(s.name, 'Unknown') as student_name
+               s.name as student_name
         FROM student_fees sf
-        LEFT JOIN students s ON s.id = sf.student_id
+        INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
         WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND sf.amount_paid > 0
         ORDER BY sf.paid_date DESC
         LIMIT 10
@@ -583,9 +586,9 @@ class SQLiteService {
 
       final dueStudentsList = await db.rawQuery('''
         SELECT sf.id, sf.amount_due as total_due, sf.created_at, sf.student_id, 
-               COALESCE(s.name, 'Unknown') as student_name, s.class_id, s.phone
+               s.name as student_name, s.class_id, s.phone
         FROM student_fees sf
-        LEFT JOIN students s ON s.id = sf.student_id
+        INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
         WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND sf.amount_due > 0 AND sf.status != 'PAID'
         ORDER BY sf.created_at ASC
       ''', academicYear != null ? [academicYear] : []);

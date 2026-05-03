@@ -94,6 +94,14 @@ class StudentRepository {
       whereArgs: [studentId]
     );
 
+    // Cascade: also soft-delete all fee records for this student
+    await _dbService.update(
+      'student_fees',
+      {'is_deleted': 1, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'student_id = ?',
+      whereArgs: [studentId],
+    );
+
     // Remove from in-memory cache instantly for UI responsiveness
     _cachedStudents?.removeWhere((s) => s.id == studentId);
     
