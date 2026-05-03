@@ -7,6 +7,7 @@ import '../../../core/constants/class_constants.dart';
 import '../../../services/db/sqlite_service.dart';
 import 'add_student_screen.dart';
 import 'student_detail_screen.dart';
+import 'excel_import_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
 
 // Provides standard fetched students via lazy rendering
@@ -129,6 +130,23 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
             : null,
         automaticallyImplyLeading: false,
         title: Text(_userRole == 'teacher' ? 'My Students' : 'All Students'),
+        actions: [
+          if (_userRole == 'admin')
+            IconButton(
+              icon: const Icon(Icons.upload_file_rounded),
+              tooltip: 'Import from Excel',
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ExcelImportScreen()),
+                );
+                if (result == true) {
+                  ref.invalidate(studentsListProvider);
+                  ref.invalidate(dashboardMetricsProvider);
+                }
+              },
+            ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: null,

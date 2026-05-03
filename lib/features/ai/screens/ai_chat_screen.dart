@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'providers/ai_provider.dart';
+import '../providers/ai_provider.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
   const AiChatScreen({super.key});

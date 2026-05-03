@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqflite/sqflite.dart';
 import 'dart:convert';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
@@ -60,6 +61,24 @@ class StudentRepository {
     _queueSync('students', student.id, 'INSERT', student.toJson());
   }
 
+  /// Update an existing student's data.
+  Future<void> updateStudent(StudentModel student) async {
+    final updated = student.copyWith(
+      updatedAt: DateTime.now(),
+      isSynced: false,
+    );
+
+    await _dbService.update(
+      'students',
+      updated.toJson(),
+      where: 'id = ?',
+      whereArgs: [updated.id],
+    );
+
+    invalidateStudentCache();
+    _queueSync('students', updated.id, 'UPDATE', updated.toJson());
+  }
+
   /// Soft Delete Implementation
   Future<void> deleteStudentSoft(String studentId) async {
     final updateData = {
@@ -93,5 +112,33 @@ class StudentRepository {
         'attempt_count': 0,
       });
   }
-}
 
+  /// Bulk insert students using a batch transaction for performance.
+  /// Returns the number of students successfully inserted.
+  Future<int> bulkAddStudents(List<StudentModel> students) async {
+    if (students.isEmpty) return 0;
+
+    final db = await _dbService.database;
+
+    // Batch insert inside a transaction for speed
+    await db.transaction((txn) async {
+      final batch = txn.batch();
+      for (final student in students) {
+        batch.insert(
+          'students',
+          student.toJson(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+    });
+
+    // Queue each for sync (outside transaction so stream notifications fire)
+    for (final student in students) {
+      _queueSync('students', student.id, 'INSERT', student.toJson());
+    }
+
+    invalidateStudentCache();
+    return students.length;
+  }
+}

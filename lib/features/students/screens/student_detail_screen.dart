@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
+import '../repositories/student_repository.dart';
+import '../../dashboard/repositories/dashboard_repository.dart';
+import '../../auth/repositories/auth_repository.dart';
+import 'add_student_screen.dart';
+import 'students_screen.dart';
 
 class StudentDetailScreen extends ConsumerStatefulWidget {
   final StudentModel student;
@@ -16,11 +21,20 @@ class _StudentDetailState extends ConsumerState<StudentDetailScreen> {
   List<Map<String, dynamic>> _marksData = [];
   List<Map<String, dynamic>> _feeData = [];
   bool _isLoading = true;
+  String _userRole = '';
 
   @override
   void initState() {
     super.initState();
     _loadStudentData();
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final session = await ref.read(authRepositoryProvider).getSession();
+    if (session != null && mounted) {
+      setState(() => _userRole = session.role);
+    }
   }
 
   Future<void> _loadStudentData() async {
@@ -81,6 +95,32 @@ class _StudentDetailState extends ConsumerState<StudentDetailScreen> {
             onPressed: () => Navigator.pop(context),
           ),
           title: Text(s.name),
+          actions: [
+            if (_userRole == 'admin') ...[
+              IconButton(
+                icon: const Icon(Icons.edit_rounded),
+                tooltip: 'Edit Student',
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => AddStudentScreen(existingStudent: s),
+                    ),
+                  );
+                  if (result == true && mounted) {
+                    ref.invalidate(studentsListProvider);
+                    ref.invalidate(dashboardMetricsProvider);
+                    Navigator.pop(context, true); // go back to refreshed list
+                  }
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.red),
+                tooltip: 'Delete Student',
+                onPressed: () => _confirmDelete(s),
+              ),
+            ],
+          ],
           bottom: const TabBar(
             isScrollable: true,
             labelStyle: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
@@ -563,5 +603,29 @@ class _StudentDetailState extends ConsumerState<StudentDetailScreen> {
         Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
       ],
     );
+  }
+
+  void _confirmDelete(StudentModel s) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Student?'),
+        content: Text('Are you sure you want to remove ${s.name}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true && mounted) {
+      await ref.read(studentRepositoryProvider).deleteStudentSoft(s.id);
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
+      if (mounted) Navigator.pop(context, true);
+    }
   }
 }

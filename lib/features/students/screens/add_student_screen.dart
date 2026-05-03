@@ -10,7 +10,10 @@ import '../../../core/utils/validator_service.dart';
 import '../../auth/repositories/auth_repository.dart';
 
 class AddStudentScreen extends ConsumerStatefulWidget {
-  const AddStudentScreen({Key? key}) : super(key: key);
+  final StudentModel? existingStudent;
+  const AddStudentScreen({Key? key, this.existingStudent}) : super(key: key);
+
+  bool get isEditing => existingStudent != null;
 
   @override
   ConsumerState<AddStudentScreen> createState() => _AddStudentScreenState();
@@ -74,6 +77,37 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
     super.initState();
     _rollCtrl.addListener(_updateDefaultCredentials);
     _loadUserRole();
+    _prefillIfEditing();
+  }
+
+  void _prefillIfEditing() {
+    final s = widget.existingStudent;
+    if (s == null) return;
+    _nameCtrl.text = s.name;
+    _rollCtrl.text = s.rollNumber;
+    _phoneCtrl.text = s.phone;
+    _emailCtrl.text = s.email ?? '';
+    _aadharCtrl.text = s.aadharNumber ?? '';
+    _gender = s.gender;
+    _classId = s.classId;
+    _bloodGroup = s.bloodGroup ?? '';
+    _dob = s.dateOfBirth;
+    _category = s.category ?? 'General';
+    _caste = s.caste ?? '';
+    _religion = s.religion ?? 'Hindu';
+    _nationality = s.nationality ?? 'Indian';
+    _addressCtrl.text = s.address;
+    _cityCtrl.text = s.city ?? '';
+    _stateCtrl.text = s.state ?? 'Madhya Pradesh';
+    _pincodeCtrl.text = s.pincode ?? '';
+    _fatherNameCtrl.text = s.parentName;
+    _fatherPhoneCtrl.text = s.parentPhone;
+    _fatherOccCtrl.text = s.parentOccupation ?? '';
+    _motherNameCtrl.text = s.motherName ?? '';
+    _motherPhoneCtrl.text = s.motherPhone ?? '';
+    _prevSchoolCtrl.text = s.previousSchool ?? '';
+    _prevClassCtrl.text = s.previousClass ?? '';
+    _createAccounts = false; // No account creation in edit mode
   }
 
   Future<void> _loadUserRole() async {
@@ -131,7 +165,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
     try {
       ValidatorService.validateStudent(_nameCtrl.text, _rollCtrl.text, _phoneCtrl.text);
 
-      final studentId = DateTime.now().millisecondsSinceEpoch.toString();
+      final studentId = widget.existingStudent?.id ?? DateTime.now().millisecondsSinceEpoch.toString();
 
       final newStudent = StudentModel(
         id: studentId,
@@ -159,23 +193,27 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
         previousSchool: _prevSchoolCtrl.text.trim().isNotEmpty ? _prevSchoolCtrl.text.trim() : null,
         previousClass: _prevClassCtrl.text.trim().isNotEmpty ? _prevClassCtrl.text.trim() : null,
         aadharNumber: _aadharCtrl.text.trim().isNotEmpty ? _aadharCtrl.text.trim() : null,
-        admissionDate: DateTime.now(),
-        status: _userRole == 'teacher' ? 'pending' : 'approved',
-        deviceId: 'device_01',
+        admissionDate: widget.existingStudent?.admissionDate ?? DateTime.now(),
+        status: widget.isEditing ? (widget.existingStudent!.status) : (_userRole == 'teacher' ? 'pending' : 'approved'),
+        deviceId: widget.existingStudent?.deviceId ?? 'device_01',
       );
 
-      // 1. Save student locally
-      await ref.read(studentRepositoryProvider).addStudent(newStudent);
+      // 1. Save or update student locally
+      if (widget.isEditing) {
+        await ref.read(studentRepositoryProvider).updateStudent(newStudent);
+      } else {
+        await ref.read(studentRepositoryProvider).addStudent(newStudent);
+      }
 
-      // 2. Create logins on backend if opted in
-      if (_createAccounts) {
+      // 2. Create logins on backend if opted in (only for new students)
+      if (!widget.isEditing && _createAccounts) {
         await _createStudentAccounts(studentId);
         // Success handled inside _createStudentAccounts (shows dialog)
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: const Text('Student added successfully! ✅'),
+              content: Text(widget.isEditing ? 'Student updated successfully! ✅' : 'Student added successfully! ✅'),
               backgroundColor: Colors.green[700],
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -339,7 +377,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Add New Student'),
+        title: Text(widget.isEditing ? 'Edit Student' : 'Add New Student'),
         actions: [
           if (_isSaving)
             const Padding(

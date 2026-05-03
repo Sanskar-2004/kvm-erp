@@ -19,6 +19,8 @@ dependencies:
   google_fonts: ^8.0.2
   shared_preferences: ^2.2.2
   sqflite_common_ffi: ^2.4.0+2
+  excel: ^4.0.6
+  file_picker: ^8.0.0+1
 
 dev_dependencies:
   flutter_test:

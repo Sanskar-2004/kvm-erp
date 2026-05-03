@@ -17,6 +17,7 @@ final studentsListProvider = Provider<List<StudentModel>>((ref) {
       gender: 'Male',
       address: '123, Model Town',
       admissionDate: DateTime(2020, 4, 1),
+      deviceId: 'mock',
     ),
     StudentModel(
       id: '2',
@@ -30,6 +31,7 @@ final studentsListProvider = Provider<List<StudentModel>>((ref) {
       gender: 'Female',
       address: '456, Civil Lines',
       admissionDate: DateTime(2020, 4, 1),
+      deviceId: 'mock',
     ),
   ];
 });
