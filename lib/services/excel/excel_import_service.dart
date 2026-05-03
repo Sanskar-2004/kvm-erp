@@ -69,7 +69,7 @@ class ExcelImportService {
 
   /// Required fields that must be present and non-empty.
   static const _requiredFields = [
-    'name', 'rollNumber', 'classId', 'phone', 'gender', 'dateOfBirth', 'address', 'parentName',
+    'name', 'rollNumber', 'classId', 'phone', 'gender', 'dateOfBirth',
   ];
 
   static const _validGenders = ['male', 'female', 'other'];
@@ -245,7 +245,7 @@ class ExcelImportService {
           classId: classId,
           email: _nullIfEmpty(rawData['email']),
           phone: rawData['phone']!,
-          parentName: rawData['parentName']!,
+          parentName: rawData['parentName'] ?? 'Unknown',
           parentPhone: rawData['parentPhone'] ?? 'N/A',
           parentOccupation: _nullIfEmpty(rawData['parentOccupation']),
           motherName: _nullIfEmpty(rawData['motherName']),
@@ -257,7 +257,7 @@ class ExcelImportService {
           religion: _nullIfEmpty(rawData['religion']),
           nationality: rawData['nationality'] ?? 'Indian',
           bloodGroup: _nullIfEmpty(rawData['bloodGroup']),
-          address: rawData['address']!,
+          address: rawData['address'] ?? 'N/A',
           city: _nullIfEmpty(rawData['city']),
           state: _nullIfEmpty(rawData['state']),
           pincode: _nullIfEmpty(rawData['pincode']),

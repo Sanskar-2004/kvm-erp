@@ -142,6 +142,18 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             
             // Admin sees everything
             if (_userRole == 'admin') return true;
+
+            // Separate logic for teachers and accountants based on screen mode
+            if (_userRole == 'teacher' || _userRole == 'accountant') {
+              final postedByRole = n.postedBy.toLowerCase();
+              if (widget.canCreate) {
+                // In "Send Notice" screen: only show notices they created
+                return postedByRole == _userRole;
+              } else {
+                // In "View Notices" screen: only show notices targeted to them (by admin)
+                return n.targetAudience == 'all' || n.targetAudience == '${_userRole}s';
+              }
+            }
             
             // Everyone sees 'all' targeted notices
             if (n.targetAudience == 'all') return true;
@@ -149,20 +161,12 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             // Users see notices targeted at their role
             if (n.targetAudience == 'students' && _userRole == 'student') return true;
             if (n.targetAudience == 'parents' && _userRole == 'parent') return true;
-            if (n.targetAudience == 'teachers' && _userRole == 'teacher') return true;
-            if (n.targetAudience == 'accountants' && _userRole == 'accountant') return true;
             
             // Check specific student targeting
             if (n.targetAudience.startsWith('student:')) {
               final targetStudentId = n.targetAudience.substring(8);
               if (_userRole == 'student' && _userId == targetStudentId) return true;
               if (_userRole == 'parent' && _childStudentIds.contains(targetStudentId)) return true;
-            }
-            
-            // Teachers & accountants also see notices THEY created
-            if (_userRole == 'teacher' || _userRole == 'accountant') {
-              final postedByRole = n.postedBy.toLowerCase();
-              if (postedByRole == _userRole) return true;
             }
             
             return false;

@@ -498,9 +498,10 @@ class SQLiteService {
     final alertsRaw = await db.rawQuery('''
       SELECT id, title as message, is_important as is_read, posted_at as created_at
       FROM notices
-      WHERE is_deleted = 0
+      WHERE is_deleted = 0 
+        AND (target_audience = 'all' OR target_audience = 'students' OR target_audience = 'parents' OR target_audience = ?)
       ORDER BY posted_at DESC LIMIT 5
-    ''');
+    ''', ['student:$studentId']);
 
     return {
       'attendance': {
