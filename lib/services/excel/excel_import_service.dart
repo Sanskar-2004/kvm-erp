@@ -111,7 +111,7 @@ class ExcelImportService {
       final cell = headerRow[col];
       if (cell == null || cell.value == null) continue;
 
-      final headerText = cell.value.toString().trim().toLowerCase()
+      final headerText = _getCellValueString(cell.value).toLowerCase()
           .replaceAll(RegExp(r"[''`]"), '')  // remove apostrophes
           .replaceAll(RegExp(r'\s+'), ' ');   // normalize whitespace
 
@@ -144,7 +144,7 @@ class ExcelImportService {
       for (final entry in columnMapping.entries) {
         final cell = (entry.key < row.length) ? row[entry.key] : null;
         if (cell != null && cell.value != null) {
-          rawData[entry.value] = cell.value.toString().trim();
+          rawData[entry.value] = _getCellValueString(cell.value);
         }
       }
 
@@ -320,6 +320,43 @@ class ExcelImportService {
   static String _capitalizeFirst(String s) {
     if (s.isEmpty) return s;
     return s[0].toUpperCase() + s.substring(1).toLowerCase();
+  }
+
+  static String _getCellValueString(CellValue? value) {
+    if (value == null) return '';
+    
+    // In excel 4.x, value properties depend on the subtype.
+    if (value is TextCellValue) {
+      return value.value.text?.toString().trim() ?? '';
+    } else if (value is IntCellValue) {
+      return value.value.toString().trim();
+    } else if (value is DoubleCellValue) {
+      String str = value.value.toString().trim();
+      if (str.endsWith('.0')) {
+        str = str.substring(0, str.length - 2);
+      }
+      return str;
+    } else if (value is BoolCellValue) {
+      return value.value.toString().trim();
+    } else if (value is DateCellValue) {
+      return "${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}";
+    }
+    
+    // Fallback if type isn't matched
+    String str = value.toString().trim();
+    // Sometimes toString() yields something like "TextCellValue(hello)"
+    if (str.contains('CellValue(')) {
+      final RegExp regExp = RegExp(r'CellValue\((.*)\)');
+      final match = regExp.firstMatch(str);
+      if (match != null && match.groupCount >= 1) {
+        str = match.group(1) ?? str;
+      }
+    }
+    
+    if (str.endsWith('.0')) {
+      str = str.substring(0, str.length - 2);
+    }
+    return str.trim();
   }
 
   static String? _nullIfEmpty(String? s) {
