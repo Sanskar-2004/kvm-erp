@@ -7,6 +7,7 @@ import '../../academics/screens/academics_screen.dart';
 import '../../backup/screens/backup_screen.dart';
 import '../../admission/screens/admission_screen.dart';
 import '../../staff/screens/staff_screen.dart';
+import '../../notices/screens/notices_screen.dart';
 import 'admin_finance_screen.dart';
 import 'package:http/http.dart' as http;
 import '../../auth/repositories/auth_repository.dart';
@@ -126,6 +127,12 @@ class AdminDashboard extends ConsumerWidget {
                     color: Colors.indigo,
                     onTap: () => Navigator.push(context,
                         MaterialPageRoute(builder: (_) => const AdminFinanceScreen()))),
+                _ActionCard(
+                    title: 'Send Notice',
+                    icon: Icons.campaign_rounded,
+                    color: Colors.deepPurple,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const NoticesScreen(canCreate: true)))),
               ],
             ),
           ],

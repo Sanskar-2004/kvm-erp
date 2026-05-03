@@ -4,6 +4,7 @@ import '../repositories/student_repository.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
 import '../../../../models/student_model.dart';
 import '../../../core/constants/class_constants.dart';
+import '../../../services/db/sqlite_service.dart';
 import 'add_student_screen.dart';
 import 'student_detail_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
@@ -27,6 +28,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   String _sortBy = 'Name';
   String _searchQuery = '';
   String _userRole = '';
+  List<String> _teacherClasses = []; // Classes assigned to this teacher
 
   @override
   void initState() {
@@ -38,7 +40,35 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session != null && mounted) {
       setState(() => _userRole = session.role);
+      // If teacher, load their assigned classes
+      if (session.role == 'teacher') {
+        await _loadTeacherClasses(session.userId);
+      }
     }
+  }
+
+  Future<void> _loadTeacherClasses(String userId) async {
+    try {
+      final db = await SQLiteService().database;
+      // Check timetable for classes this teacher teaches
+      final results = await db.rawQuery(
+        'SELECT DISTINCT class_id FROM timetable WHERE teacher_id = ? AND is_deleted = 0',
+        [userId],
+      );
+      // Also check staff_assignments
+      final assignments = await db.rawQuery(
+        'SELECT DISTINCT class_id FROM staff_assignments WHERE staff_id = ? AND is_deleted = 0',
+        [userId],
+      );
+      final classes = <String>{};
+      for (var r in results) {
+        if (r['class_id'] != null) classes.add(r['class_id'].toString());
+      }
+      for (var r in assignments) {
+        if (r['class_id'] != null) classes.add(r['class_id'].toString());
+      }
+      if (mounted) setState(() => _teacherClasses = classes.toList());
+    } catch (_) {}
   }
 
   // Canonical filter options (not dynamically extracted)
@@ -91,11 +121,14 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text('All Students'),
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
+        automaticallyImplyLeading: false,
+        title: Text(_userRole == 'teacher' ? 'My Students' : 'All Students'),
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: null,
@@ -118,15 +151,21 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (err, _) => Center(child: Text('Error: $err')),
         data: (allStudents) {
+          // If teacher, pre-filter to only their assigned classes
+          var visibleStudents = allStudents;
+          if (_userRole == 'teacher' && _teacherClasses.isNotEmpty) {
+            visibleStudents = allStudents.where((s) => _teacherClasses.contains(s.classId)).toList();
+          }
+
           // Extract real filter options from data
-          _extractFilterOptions(allStudents);
+          _extractFilterOptions(visibleStudents);
 
           // Validate selected filters still exist in data
           if (!_availableClasses.contains(_selectedClass)) _selectedClass = 'All';
           if (!_availableGenders.contains(_selectedGender)) _selectedGender = 'All';
           if (!_availableCategories.contains(_selectedCategory)) _selectedCategory = 'All';
 
-          final filtered = _applyFilters(allStudents);
+          final filtered = _applyFilters(visibleStudents);
 
           return Column(
             children: [

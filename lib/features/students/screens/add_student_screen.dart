@@ -20,6 +20,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isSaving = false;
   int _currentStep = 0;
+  String _userRole = 'admin'; // default
 
   // Personal
   final _nameCtrl = TextEditingController();
@@ -71,8 +72,15 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   @override
   void initState() {
     super.initState();
-    // Auto-fill credentials when roll number changes
     _rollCtrl.addListener(_updateDefaultCredentials);
+    _loadUserRole();
+  }
+
+  Future<void> _loadUserRole() async {
+    final session = await ref.read(authRepositoryProvider).getSession();
+    if (session != null && mounted) {
+      setState(() => _userRole = session.role);
+    }
   }
 
   void _updateDefaultCredentials() {
@@ -152,6 +160,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
         previousClass: _prevClassCtrl.text.trim().isNotEmpty ? _prevClassCtrl.text.trim() : null,
         aadharNumber: _aadharCtrl.text.trim().isNotEmpty ? _aadharCtrl.text.trim() : null,
         admissionDate: DateTime.now(),
+        status: _userRole == 'teacher' ? 'pending' : 'approved',
         deviceId: 'device_01',
       );
 

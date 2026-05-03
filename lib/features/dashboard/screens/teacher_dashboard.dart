@@ -4,6 +4,7 @@ import '../../attendance/screens/attendance_screen.dart';
 import '../../marks/screens/marks_screen.dart';
 import '../../timetable/screens/timetable_screen.dart';
 import '../../students/screens/students_screen.dart';
+import '../../notices/screens/notices_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/db/sqlite_service.dart';
 
@@ -93,6 +94,14 @@ class _TeacherDashboardState extends ConsumerState<TeacherDashboard> {
                       Navigator.push(context,
                           MaterialPageRoute(builder: (_) => const StudentsScreen()));
                     },
+                  ),
+                  _TeacherAction(
+                    title: 'Send Notice',
+                    subtitle: 'Alert students & parents',
+                    icon: Icons.campaign_rounded,
+                    color: Colors.deepPurple,
+                    onTap: () => Navigator.push(context,
+                        MaterialPageRoute(builder: (_) => const NoticesScreen(canCreate: true))),
                   ),
                 ],
               ),
