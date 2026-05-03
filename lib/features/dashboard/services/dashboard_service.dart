@@ -31,10 +31,10 @@ class DashboardService {
     return (present / total) * 100;
   }
 
-  /// Retrieves the total number of students in the school
+  /// Retrieves the total number of approved students in the school
   Future<int> getTotalStudents() async {
     final db = await _db.database;
-    final res = await db.rawQuery('SELECT COUNT(id) as count FROM students WHERE is_deleted = 0');
+    final res = await db.rawQuery("SELECT COUNT(id) as count FROM students WHERE is_deleted = 0 AND (status = 'approved' OR status IS NULL)");
     
     if (res.isEmpty) return 0;
     return SqfliteUtils.toInt(res.first['count']) ?? 0;

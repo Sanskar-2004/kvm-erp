@@ -30,11 +30,11 @@ class StudentRepository {
     final db = await _dbService.database;
     final results = await db.query(
       'students', 
-      where: 'is_deleted = ?', 
-      whereArgs: [0],
+      where: 'is_deleted = ? AND (status = ? OR status IS NULL)', 
+      whereArgs: [0, 'approved'],
       limit: limit,
       offset: offset,
-      orderBy: 'name ASC', // Optional logical sort
+      orderBy: 'name ASC',
     );
     
     final fetched = results.map((e) => StudentModel.fromJson(e)).toList();
