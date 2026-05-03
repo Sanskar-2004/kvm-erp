@@ -585,11 +585,11 @@ class SQLiteService {
       ''', academicYear != null ? [academicYear] : []);
 
       final dueStudentsList = await db.rawQuery('''
-        SELECT sf.id, sf.amount_due as total_due, sf.created_at, sf.student_id, 
+        SELECT sf.id, (sf.amount_due - sf.amount_paid) as total_due, sf.created_at, sf.student_id, 
                s.name as student_name, s.class_id, s.phone
         FROM student_fees sf
         INNER JOIN students s ON s.id = sf.student_id AND s.is_deleted = 0
-        WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND sf.amount_due > 0 AND sf.status != 'PAID'
+        WHERE sf.is_deleted = 0 ${academicYear != null ? 'AND sf.academic_year = ?' : ''} AND (sf.amount_due - sf.amount_paid) > 0
         ORDER BY sf.created_at ASC
       ''', academicYear != null ? [academicYear] : []);
 

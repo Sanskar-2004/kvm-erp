@@ -16,11 +16,15 @@ class NoticesScreen extends ConsumerStatefulWidget {
 class _NoticesScreenState extends ConsumerState<NoticesScreen> {
   String _userRole = '';
   String _userId = '';
+  List<String> _childStudentIds = [];
+
+  List<Map<String, dynamic>> _studentsList = [];
 
   @override
   void initState() {
     super.initState();
     _loadRole();
+    _loadStudents();
   }
 
   Future<void> _loadRole() async {
@@ -30,33 +34,75 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
         _userRole = session.role;
         _userId = session.userId;
       });
+      
+      if (_userRole == 'parent') {
+        try {
+          final db = await SQLiteService().database;
+          final userRows = await db.query('users', where: 'id = ?', whereArgs: [_userId]);
+          if (userRows.isNotEmpty) {
+            String? contact = userRows.first['username']?.toString();
+            if (contact == null || contact.isEmpty) {
+              contact = userRows.first['email']?.toString();
+            }
+            if (contact != null) {
+              final studentRows = await db.rawQuery('''
+                SELECT id FROM students 
+                WHERE (parent_phone = ? OR phone = ? OR email = ?) AND is_deleted = 0
+              ''', [contact, contact, contact]);
+              
+              setState(() {
+                _childStudentIds = studentRows.map((r) => r['id'].toString()).toList();
+              });
+            }
+          }
+        } catch (_) {}
+      }
+
       // Re-trigger the provider now that role is loaded
       ref.invalidate(noticesListProvider);
     }
   }
 
+  Future<void> _loadStudents() async {
+    try {
+      final db = await SQLiteService().database;
+      final rows = await db.query(
+        'students', 
+        columns: ['id', 'name', 'class_id'], 
+        where: 'is_deleted = 0',
+        orderBy: 'name ASC'
+      );
+      if (mounted) {
+        setState(() {
+          _studentsList = rows;
+        });
+      }
+    } catch (_) {}
+  }
+
   /// Returns the allowed target audiences based on current user role
   List<Map<String, String>> _getAllowedTargets() {
+    final List<Map<String, String>> baseTargets = [];
     if (_userRole == 'admin') {
-      return [
+      baseTargets.addAll([
         {'label': 'All', 'value': 'all'},
         {'label': 'Students', 'value': 'students'},
         {'label': 'Parents', 'value': 'parents'},
         {'label': 'Teachers', 'value': 'teachers'},
         {'label': 'Accountants', 'value': 'accountants'},
-      ];
-    } else if (_userRole == 'teacher') {
-      return [
+      ]);
+    } else if (_userRole == 'teacher' || _userRole == 'accountant') {
+      baseTargets.addAll([
         {'label': 'Students', 'value': 'students'},
         {'label': 'Parents', 'value': 'parents'},
-      ];
-    } else if (_userRole == 'accountant') {
-      return [
-        {'label': 'Students', 'value': 'students'},
-        {'label': 'Parents', 'value': 'parents'},
-      ];
+      ]);
     }
-    return [];
+    
+    // Everyone who can create notices can also target a specific student
+    if (baseTargets.isNotEmpty) {
+      baseTargets.add({'label': 'Specific Student', 'value': 'specific_student'});
+    }
+    return baseTargets;
   }
 
   @override
@@ -105,6 +151,13 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
             if (n.targetAudience == 'parents' && _userRole == 'parent') return true;
             if (n.targetAudience == 'teachers' && _userRole == 'teacher') return true;
             if (n.targetAudience == 'accountants' && _userRole == 'accountant') return true;
+            
+            // Check specific student targeting
+            if (n.targetAudience.startsWith('student:')) {
+              final targetStudentId = n.targetAudience.substring(8);
+              if (_userRole == 'student' && _userId == targetStudentId) return true;
+              if (_userRole == 'parent' && _childStudentIds.contains(targetStudentId)) return true;
+            }
             
             // Teachers & accountants also see notices THEY created
             if (_userRole == 'teacher' || _userRole == 'accountant') {
@@ -224,6 +277,37 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
               ),
               const SizedBox(height: 12),
 
+              if (target == 'specific_student') ...[
+                Autocomplete<Map<String, dynamic>>(
+                  optionsBuilder: (TextEditingValue textEditingValue) {
+                    if (textEditingValue.text.isEmpty) {
+                      return const Iterable<Map<String, dynamic>>.empty();
+                    }
+                    return _studentsList.where((student) {
+                      return student['name'].toString().toLowerCase().contains(textEditingValue.text.toLowerCase());
+                    });
+                  },
+                  displayStringForOption: (option) => '${option['name']} (Class ${option['class_id']})',
+                  onSelected: (option) {
+                    target = 'student:${option['id']}';
+                  },
+                  fieldViewBuilder: (context, controller, focusNode, onEditingComplete) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onEditingComplete: onEditingComplete,
+                      decoration: InputDecoration(
+                        labelText: 'Search Student Name *',
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        isDense: true,
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 12),
+              ],
+
               // Important toggle
               SwitchListTile(
                 value: isImportant,
@@ -243,6 +327,12 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                     if (titleCtrl.text.trim().isEmpty || descCtrl.text.trim().isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Please fill title and message'), backgroundColor: Colors.red),
+                      );
+                      return;
+                    }
+                    if (target == 'specific_student') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Please select a student from the dropdown'), backgroundColor: Colors.red),
                       );
                       return;
                     }
@@ -352,6 +442,13 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
       _ => Colors.grey,
     };
 
+    String audienceLabel = 'To: ${notice.targetAudience.toUpperCase()}';
+    if (notice.targetAudience.startsWith('student:')) {
+      final id = notice.targetAudience.substring(8);
+      final student = _studentsList.firstWhere((s) => s['id']?.toString() == id, orElse: () => <String, dynamic>{});
+      audienceLabel = student.isNotEmpty ? 'To: ${student['name']}' : 'To: Specific Student';
+    }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -393,7 +490,7 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                       border: Border.all(color: audienceColor.withOpacity(0.3)),
                     ),
                     child: Text(
-                      'To: ${notice.targetAudience.toUpperCase()}',
+                      audienceLabel,
                       style: TextStyle(color: audienceColor, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -481,14 +578,18 @@ class _NoticeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final audienceColor = switch (notice.targetAudience) {
-      'all' => Colors.blue,
-      'students' => Colors.purple,
-      'parents' => Colors.green,
-      'teachers' => Colors.orange,
-      'accountants' => Colors.teal,
-      _ => Colors.grey,
-    };
+    Color audienceColor = Colors.grey;
+    if (notice.targetAudience == 'all') audienceColor = Colors.blue;
+    else if (notice.targetAudience == 'students') audienceColor = Colors.purple;
+    else if (notice.targetAudience == 'parents') audienceColor = Colors.green;
+    else if (notice.targetAudience == 'teachers') audienceColor = Colors.orange;
+    else if (notice.targetAudience == 'accountants') audienceColor = Colors.teal;
+    else if (notice.targetAudience.startsWith('student:')) audienceColor = Colors.pink;
+
+    String audienceLabel = notice.targetAudience.toUpperCase();
+    if (notice.targetAudience.startsWith('student:')) {
+      audienceLabel = 'SPECIFIC STUDENT';
+    }
 
     return GestureDetector(
       onTap: onTap,
@@ -520,7 +621,7 @@ class _NoticeCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
-                    notice.targetAudience.toUpperCase(),
+                    audienceLabel,
                     style: TextStyle(color: audienceColor, fontSize: 9, fontWeight: FontWeight.bold),
                   ),
                 ),
