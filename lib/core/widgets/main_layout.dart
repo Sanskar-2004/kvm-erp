@@ -224,28 +224,39 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           const SizedBox(width: 4),
         ],
       ),
-      body: screens[_currentIndex],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 1200),
+          child: screens[_currentIndex],
+        ),
+      ),
       bottomNavigationBar: navItems.length > 1
-          ? Container(
-              decoration: BoxDecoration(
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -2),
+          ? Center(
+              heightFactor: 1,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Container(
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: BottomNavigationBar(
-                currentIndex: _currentIndex,
-                onTap: (index) => setState(() => _currentIndex = index),
-                items: navItems,
-                type: BottomNavigationBarType.fixed,
-                selectedItemColor: roleBadgeColor,
-                unselectedItemColor: Colors.grey[400],
-                selectedFontSize: 12,
-                unselectedFontSize: 11,
-                elevation: 8,
+                  child: BottomNavigationBar(
+                    currentIndex: _currentIndex,
+                    onTap: (index) => setState(() => _currentIndex = index),
+                    items: navItems,
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: roleBadgeColor,
+                    unselectedItemColor: Colors.grey[400],
+                    selectedFontSize: 12,
+                    unselectedFontSize: 11,
+                    elevation: 8,
+                  ),
+                ),
               ),
             )
           : null,

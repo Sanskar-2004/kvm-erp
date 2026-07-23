@@ -19,6 +19,10 @@ class AdminDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final metricsAsync = ref.watch(dashboardMetricsProvider);
 
+    final width = MediaQuery.of(context).size.width;
+    final statCrossAxisCount = width > 900 ? 4 : (width > 600 ? 3 : 2);
+    final actionCrossAxisCount = width > 900 ? 4 : (width > 600 ? 3 : 2);
+
     return Scaffold(
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -35,12 +39,12 @@ class AdminDashboard extends ConsumerWidget {
             // ── Stats Grid ──
             metricsAsync.when(
               data: (metrics) => GridView.count(
-                crossAxisCount: 2,
+                crossAxisCount: statCrossAxisCount,
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
-                childAspectRatio: 1.6,
+                childAspectRatio: width > 600 ? 2.2 : 1.6,
                 children: [
                   _StatCard(
                       title: 'Total Students',
@@ -79,11 +83,12 @@ class AdminDashboard extends ConsumerWidget {
                     ?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 12),
             GridView.count(
-              crossAxisCount: 3,
+              crossAxisCount: actionCrossAxisCount,
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              childAspectRatio: width > 600 ? 1.5 : 1.0,
               children: [
                 _ActionCard(
                     title: 'Manage Students',
