@@ -128,7 +128,6 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
                 onPressed: () => Navigator.pop(context),
               )
             : null,
-        automaticallyImplyLeading: false,
         title: Text(_userRole == 'teacher' ? 'My Students' : 'All Students'),
         actions: [
           if (_userRole == 'admin')

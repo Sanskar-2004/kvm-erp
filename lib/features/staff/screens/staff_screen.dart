@@ -38,6 +38,12 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Navigator.canPop(context)
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         title: const Text('Staff Directory'),
         backgroundColor: Colors.indigo[800],
         actions: [

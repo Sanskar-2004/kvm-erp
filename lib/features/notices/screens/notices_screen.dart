@@ -117,7 +117,6 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
                 onPressed: () => Navigator.pop(context),
               )
             : null,
-        automaticallyImplyLeading: false,
         title: const Text('Notices & Alerts'),
       ),
       floatingActionButton: widget.canCreate

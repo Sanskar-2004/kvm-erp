@@ -6,6 +6,8 @@ import '../../timetable/screens/timetable_screen.dart';
 import '../../students/screens/students_screen.dart';
 import '../../notices/screens/notices_screen.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/screens/login_screen.dart';
 import '../../../services/db/sqlite_service.dart';
 
 class TeacherDashboard extends ConsumerStatefulWidget {
