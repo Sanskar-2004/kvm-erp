@@ -9,6 +9,9 @@ import '../../../services/db/sqlite_service.dart';
 import '../../../services/sync/sync_service.dart';
 import '../../notices/screens/notices_screen.dart';
 
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/screens/login_screen.dart';
+
 class ParentDashboard extends ConsumerStatefulWidget {
   const ParentDashboard({Key? key}) : super(key: key);
 
@@ -179,23 +182,22 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         setState(() {
           _summary = localSummary;
           _studentDetails = Map<String, dynamic>.from(studentRows.first);
-          _isLoading = false; // Show immediately
+          _isLoading = false;
         });
-      } else {
-        setState(() => _summary = localSummary);
       }
 
-      // 3. Sync in background and refresh silently
-      _syncSummaryInBackground(studentId);
-
+      // 3. Sync in background (non-blocking)
+      final session = await ref.read(authRepositoryProvider).getSession();
+      if (session != null) {
+        _syncSummaryInBackground(session, studentId);
+      }
     } catch (e) {
-      debugPrint('Summary error: $e');
-      if (mounted) setState(() => _isLoading = false);
+      debugPrint('Load student summary error: $e');
+      setState(() => _isLoading = false);
     }
   }
 
-  /// Background sync for student summary
-  void _syncSummaryInBackground(String studentId) async {
+  void _syncSummaryInBackground(dynamic session, String studentId) async {
     try {
       await ref.read(syncServiceProvider).runSyncSafe();
     } catch (_) {}
@@ -216,17 +218,14 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           _isLoading = false;
         });
       }
-    } catch (e) {
-      debugPrint('Background summary sync error: $e');
-      if (mounted) setState(() => _isLoading = false);
-    }
+    } catch (_) {}
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${_parentName ?? "Parent"}\'s Dashboard'),
+        title: const Text('Parent Dashboard'),
         actions: [
           DropdownButton<String>(
             value: _academicYear,
@@ -255,12 +254,56 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
-              Text(
-                _parentName != null ? '$_parentName\'s Dashboard' : "Parent Dashboard",
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(fontWeight: FontWeight.bold),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _parentName != null ? '$_parentName\'s Dashboard' : "Parent Dashboard",
+                    style: Theme.of(context)
+                        .textTheme
+                        .headlineSmall
+                        ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red[600],
+                      side: BorderSide(color: Colors.red.shade200),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    icon: const Icon(Icons.logout_rounded, size: 16),
+                    label: const Text('Logout', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          title: const Text('Confirm Logout'),
+                          content: const Text('Are you sure you want to log out of KVM ERP?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Logout', style: TextStyle(color: Colors.white)),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await ref.read(authProvider.notifier).logout();
+                        if (context.mounted) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            (route) => false,
+                          );
+                        }
+                      }
+                    },
+                  ),
+                ],
               ),
               const SizedBox(height: 4),
               Text('Pull down to refresh',
