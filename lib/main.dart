@@ -137,6 +137,17 @@ class _KVMErpAppState extends ConsumerState<KVMErpApp> {
           elevation: 8,
         ),
       ),
+      builder: (context, child) {
+        return Container(
+          color: const Color(0xFFF8F9FC),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
+        );
+      },
       home: hasValidSession ? const MainLayout() : const LoginScreen(),
     );
   }

@@ -166,7 +166,53 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         elevation: 0,
         actions: [
           const SyncStatusBadge(),
-          // Profile / Logout menu
+          const SizedBox(width: 4),
+          // Explicit Logout Button
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.red[600],
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              backgroundColor: Colors.red.withOpacity(0.08),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            icon: const Icon(Icons.logout_rounded, size: 16),
+            label: const Text(
+              'Logout',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+            ),
+            onPressed: () async {
+              final confirm = await showDialog<bool>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: const Text('Confirm Logout'),
+                  content: const Text('Are you sure you want to log out of KVM ERP?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: const Text('Logout', style: TextStyle(color: Colors.white)),
+                    ),
+                  ],
+                ),
+              );
+              if (confirm == true) {
+                await ref.read(authProvider.notifier).logout();
+                if (context.mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
+              }
+            },
+          ),
+          const SizedBox(width: 8),
+          // Profile avatar menu
           PopupMenuButton<String>(
             icon: CircleAvatar(
               radius: 16,
@@ -221,7 +267,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
               }
             },
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 8),
         ],
       ),
       body: Center(
