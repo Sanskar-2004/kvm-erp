@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../../core/constants/app_constants.dart';
 import '../../../models/user_model.dart';
+import '../../../services/sync/sync_service.dart';
 import '../repositories/auth_repository.dart';
 
 // ── Role Enum ──────────────────────────────────────────────────────────
@@ -83,6 +84,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
         );
 
         state = state.copyWith(user: user, isLoading: false, isAuthenticated: true);
+
+        // Trigger immediate background sync to pull data from Render / Neon DB
+        try {
+          ref.read(syncServiceProvider).runSyncSafe();
+        } catch (_) {}
+
         return true;
       } else {
         final data = jsonDecode(response.body);

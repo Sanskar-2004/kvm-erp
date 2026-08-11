@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../services/sync/sync_service.dart';
 import '../utils/network_service.dart';
+import '../../features/students/screens/students_screen.dart';
+import '../../features/dashboard/repositories/dashboard_repository.dart';
 
 enum SyncState { idle, syncing, success, error }
 
@@ -137,6 +139,8 @@ class SyncStatusBadge extends ConsumerWidget {
       ref.invalidate(lastSyncTimeProvider);
       ref.invalidate(pendingCountProvider);
       ref.invalidate(failedCountProvider);
+      ref.invalidate(studentsListProvider);
+      ref.invalidate(dashboardMetricsProvider);
 
       // Auto-reset to idle after 3 seconds
       Future.delayed(const Duration(seconds: 3), () {

@@ -120,25 +120,30 @@ exports.syncPull = async (req, res) => {
              return res.status(400).json({ status: 'error', message: 'Missing lastSync parameter' });
         }
 
+        const isInitialSync = !lastSync || lastSync.startsWith('1970') || lastSync === '0';
         const pullPayload = {};
         
         // Loop purely through mapped specific tables dynamically dumping data
         for (const table of ALLOWED_TABLES) {
             try {
-                // Try pulling with updated_at delta
-                const result = await db.query(
-                    `SELECT * FROM "${table}" WHERE updated_at::timestamptz > $1::timestamptz`, 
-                    [lastSync]
-                );
-                pullPayload[table] = result.rows.length > 0 ? result.rows : [];
+                if (isInitialSync) {
+                    // For initial sync, pull all active records
+                    const result = await db.query(`SELECT * FROM "${table}" WHERE is_deleted = 0 OR is_deleted IS NULL`);
+                    pullPayload[table] = result.rows.length > 0 ? result.rows : [];
+                } else {
+                    // Try pulling with updated_at delta
+                    const result = await db.query(
+                        `SELECT * FROM "${table}" WHERE updated_at::timestamptz > $1::timestamptz`, 
+                        [lastSync]
+                    );
+                    pullPayload[table] = result.rows.length > 0 ? result.rows : [];
+                }
             } catch (err) {
                 // Fallback for tables missing updated_at or missing table entirely 
-                // e.g. parent_student_map, alerts, classes which might not have updated_at
                 try {
                     const fallbackResult = await db.query(`SELECT * FROM "${table}"`);
                     pullPayload[table] = fallbackResult.rows.length > 0 ? fallbackResult.rows : [];
                 } catch (fallbackErr) {
-                    // If table doesn't exist at all, ignore it safely rather than crashing the whole pull sync
                     pullPayload[table] = [];
                 }
             }
