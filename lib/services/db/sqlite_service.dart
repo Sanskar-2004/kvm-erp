@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../../core/constants/app_constants.dart';
@@ -11,6 +12,9 @@ class SQLiteService {
   // ── Singleton Access ─────────────────────────────────────────────────
 
   Future<Database> get database async {
+    if (kIsWeb) {
+      throw UnsupportedError('SQLite operations are not supported on Web target platform.');
+    }
     if (_database != null) return _database!;
     _database = await _initDB();
     return _database!;

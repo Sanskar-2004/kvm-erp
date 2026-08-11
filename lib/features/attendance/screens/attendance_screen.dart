@@ -7,6 +7,7 @@ import '../../../models/attendance_model.dart';
 import '../../students/repositories/student_repository.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
 import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/class_constants.dart';
 import '../../auth/repositories/auth_repository.dart';
 import '../../staff/repositories/assignment_repository.dart';
 
@@ -42,24 +43,18 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
   Future<void> _loadAssignedClasses() async {
     final session = await ref.read(authRepositoryProvider).getSession();
-    if (session == null || session.userId.isEmpty) {
-      // Fallback: show all classes if no userId
-      setState(() {
-        _assignedClasses = [];
-        _isLoadingClasses = false;
-      });
+    if (session == null || session.userId.isEmpty || session.role == 'admin' || session.role == 'accountant') {
+      if (mounted) {
+        setState(() {
+          _assignedClasses = List<String>.from(ClassConstants.allClasses);
+          _selectedClass = ClassConstants.allClasses.first;
+          _isLoadingClasses = false;
+        });
+      }
       return;
     }
 
     try {
-      // Phase 3 Architecture: Read exact assignments
-      // But we need the staff_id. We only have user_id in auth.
-      // Actually /api/assignments?staff_id= wants staff_id.
-      // Fallback to fetch assignments where user_id matches via custom endpoint?
-      // For now, let's query the assignments API directly using /assignments?user_id= session.userId if backend supports it.
-      // Wait, getAssignments doesn't support user_id yet. Let's send a request and let backend handle it, or we fetch the staff row first.
-      
-      // Let's use custom logic: GET /api/staff then find my id?
       final staffRes = await http.get(Uri.parse('$BASE_URL/staff'), headers: {'Authorization': 'Bearer ${session.token}'});
       String? myStaffId;
       if (staffRes.statusCode == 200) {
@@ -69,7 +64,13 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
       }
 
       if (myStaffId == null) {
-         setState(() => _isLoadingClasses = false);
+         if (mounted) {
+           setState(() {
+             _assignedClasses = List<String>.from(ClassConstants.allClasses);
+             _selectedClass = ClassConstants.allClasses.first;
+             _isLoadingClasses = false;
+           });
+         }
          return;
       }
 
