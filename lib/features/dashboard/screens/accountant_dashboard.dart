@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
@@ -10,6 +11,7 @@ import '../../fees/providers/fee_analytics_provider.dart';
 import '../../../core/utils/academic_utils.dart';
 import 'student_fee_detail_screen.dart';
 import '../../notices/screens/notices_screen.dart';
+import '../../students/repositories/student_repository.dart';
 
 class AccountantDashboard extends ConsumerStatefulWidget {
   const AccountantDashboard({Key? key}) : super(key: key);
@@ -66,12 +68,9 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   /// 2. If empty, show loading and fetch from network
   /// 3. Either way, sync in background and refresh
   Future<void> _loadLocalFirst() async {
-    // Step 1: Try loading students from local SQLite (instant)
     await _loadStudentsFromLocal();
-    // Step 2: Load fees from local SQLite (instant)
     await _loadFeesOverview();
-    // Step 3: Sync from server in background, then refresh
-    _syncInBackground();
+    if (!kIsWeb) _syncInBackground();
   }
 
   @override
@@ -87,9 +86,28 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     return double.tryParse(v.toString()) ?? 0;
   }
 
-  /// Load students from local SQLite (fast, offline-safe)
+  /// Load students from local SQLite or HTTP API on Web
   Future<void> _loadStudentsFromLocal() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
+    if (kIsWeb) {
+      try {
+        final students = await ref.read(studentRepositoryProvider).getAllStudents();
+        if (mounted) {
+          final sortedClasses = ClassConstants.allClasses;
+          setState(() {
+            _students = students.map((s) => s.toJson()).toList();
+            _classes = ['All', ...sortedClasses];
+            _isLoading = false;
+          });
+        }
+        return;
+      } catch (e) {
+        debugPrint("Web accountant students load error: $e");
+      }
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
     try {
       final db = await SQLiteService().database;
       final localStudents = await db.query(
@@ -109,7 +127,7 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
     } catch (e) {
       debugPrint('Local students load error: $e');
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -131,7 +149,6 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
                 .where((s) => s['is_deleted'] != 1)
                 .toList();
 
-        // Persist student_fees from sync response to SQLite
         final rawFees =
             List<Map<String, dynamic>>.from(data['data']['student_fees'] ?? []);
         if (rawFees.isNotEmpty) {
@@ -145,7 +162,6 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
             _students = students;
             _classes = ['All', ...sortedClasses];
           });
-          // Refresh fee analytics with newly synced data
           await _loadFeesOverview();
         }
       }
@@ -155,33 +171,73 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   }
 
   Future<void> _loadFeesOverview() async {
-    setState(() => _isFeesLoading = true);
+    if (mounted) setState(() => _isFeesLoading = true);
     try {
       final session = await ref.read(authRepositoryProvider).getSession();
-      if (session == null) return;
+      if (session == null) {
+        if (mounted) setState(() => _isFeesLoading = false);
+        return;
+      }
 
-      // By using ref.refresh, we FORCE the provider to bypass cache and query SQLite again, 
-      // ensuring immediately fresh data after a sync occurs.
+      if (kIsWeb) {
+        try {
+          final response = await http.get(
+            Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+            headers: {'Authorization': 'Bearer ${session.token}'},
+          ).timeout(const Duration(seconds: 8));
+
+          if (response.statusCode == 200) {
+            final data = jsonDecode(response.body);
+            final rawFees = List<Map<String, dynamic>>.from(data['data']?['student_fees'] ?? []);
+            
+            double totalDue = 0;
+            double totalPaid = 0;
+            for (var f in rawFees) {
+              totalDue += _parseNum(f['amount_due']);
+              totalPaid += _parseNum(f['amount_paid']);
+            }
+            if (mounted) {
+              setState(() {
+                _yearly = {
+                  'total_paid': totalPaid,
+                  'total_pending': (totalDue - totalPaid) > 0 ? (totalDue - totalPaid) : 0,
+                  'total_due': totalDue,
+                };
+                _recentTransactions = rawFees.take(10).toList();
+                _isFeesLoading = false;
+              });
+            }
+            return;
+          }
+        } catch (e) {
+          debugPrint("Web fees overview error: $e");
+        }
+        if (mounted) setState(() => _isFeesLoading = false);
+        return;
+      }
+
       final finance = await ref.refresh(feeAnalyticsProvider(_selectedYear).future);
 
-      setState(() {
-        _yearly = {
-          'total_paid': finance['collected'],
-          'total_pending': finance['pending'],
-          'total_due': finance['expected']
-        };
-        _recentTransactions =
-            List<Map<String, dynamic>>.from(finance['transactions'] ?? []);
-        _unpaidStudentCount = finance['due_students'] ?? 0;
+      if (mounted) {
+        setState(() {
+          _yearly = {
+            'total_paid': finance['collected'],
+            'total_pending': finance['pending'],
+            'total_due': finance['expected']
+          };
+          _recentTransactions =
+              List<Map<String, dynamic>>.from(finance['transactions'] ?? []);
+          _unpaidStudentCount = finance['due_students'] ?? 0;
 
-        _dueStudents =
-            List<Map<String, dynamic>>.from(finance['due_students_list'] ?? []);
-        _grandTotalDue = _parseNum(finance['pending']);
-      });
+          _dueStudents =
+              List<Map<String, dynamic>>.from(finance['due_students_list'] ?? []);
+          _grandTotalDue = _parseNum(finance['pending']);
+        });
+      }
     } catch (e) {
       debugPrint('Load fees overview error: $e');
     } finally {
-      setState(() => _isFeesLoading = false);
+      if (mounted) setState(() => _isFeesLoading = false);
     }
   }
 
