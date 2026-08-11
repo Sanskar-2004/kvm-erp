@@ -8,6 +8,8 @@ import 'package:http/http.dart' as http;
 import '../../auth/repositories/auth_repository.dart';
 import '../../../services/sync/sync_service.dart';
 
+import 'package:flutter/foundation.dart';
+
 final staffRepositoryProvider = Provider((ref) => StaffRepository(
       ref.read(sqliteServiceProvider),
       ref,
@@ -20,22 +22,62 @@ class StaffRepository {
   StaffRepository(this._sqliteService, this._ref);
 
   Future<List<StaffModel>> getAllStaff() async {
-    final result = await _sqliteService.query(
-      'staff',
-      where: 'is_deleted = 0',
-      orderBy: 'name ASC',
-    );
-    return result.map((e) => StaffModel.fromMap(e)).toList();
+    if (kIsWeb) {
+      final webStaff = await _fetchStaffFromApi();
+      if (webStaff != null && webStaff.isNotEmpty) return webStaff;
+    }
+
+    try {
+      final result = await _sqliteService.query(
+        'staff',
+        where: 'is_deleted = 0 OR is_deleted IS NULL',
+        orderBy: 'name ASC',
+      );
+      final list = result.map((e) => StaffModel.fromMap(e)).toList();
+      if (list.isNotEmpty) return list;
+    } catch (e) {
+      debugPrint("SQLite staff query error: $e");
+    }
+
+    final fallbackStaff = await _fetchStaffFromApi();
+    return fallbackStaff ?? [];
   }
 
   Future<List<StaffModel>> getStaffByRole(String role) async {
-    final result = await _sqliteService.query(
-      'staff',
-      where: 'is_deleted = 0 AND role = ?',
-      whereArgs: [role],
-      orderBy: 'name ASC',
-    );
-    return result.map((e) => StaffModel.fromMap(e)).toList();
+    final all = await getAllStaff();
+    if (role.toLowerCase() == 'all') return all;
+    return all.where((s) => s.role.toLowerCase() == role.toLowerCase()).toList();
+  }
+
+  Future<List<StaffModel>?> _fetchStaffFromApi() async {
+    try {
+      final session = await _ref.read(authRepositoryProvider).getSession();
+      if (session == null) return null;
+
+      final response = await http.get(
+        Uri.parse('$BASE_URL/staff'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body);
+        final List list = json['data'] ?? [];
+        return list.map((e) => StaffModel.fromMap(Map<String, dynamic>.from(e))).toList();
+      } else {
+        final syncRes = await http.get(
+          Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        );
+        if (syncRes.statusCode == 200) {
+          final json = jsonDecode(syncRes.body);
+          final List list = json['data']?['staff'] ?? [];
+          return list.map((e) => StaffModel.fromMap(Map<String, dynamic>.from(e))).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint("API staff fetch error: $e");
+    }
+    return null;
   }
 
   Future<void> createStaffWithAuth(StaffModel staff, {String? username, String? password}) async {

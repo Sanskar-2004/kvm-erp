@@ -30,22 +30,35 @@ class TimetableModel {
   }) : updatedAt = updatedAt ?? DateTime.now();
 
   factory TimetableModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
     return TimetableModel(
-      id: json['id'] as String,
-      classId: json['class_id'] as String,
-      day: json['day'] as String,
-      subject: json['subject'] as String,
-      teacherId: json['teacher_id'] as String,
-      teacherName: json['teacher_name'] as String,
-      startTime: json['start_time'] as String,
-      endTime: json['end_time'] as String,
-      periodNumber: json['period_number'] as int,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      classId: json['class_id']?.toString() ?? '',
+      day: json['day']?.toString() ?? 'Monday',
+      subject: json['subject']?.toString() ?? 'Subject',
+      teacherId: json['teacher_id']?.toString() ?? '',
+      teacherName: json['teacher_name']?.toString() ?? 'Teacher',
+      startTime: json['start_time']?.toString() ?? '09:00',
+      endTime: json['end_time']?.toString() ?? '10:00',
+      periodNumber: int.tryParse(json['period_number']?.toString() ?? '1') ?? 1,
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 

@@ -33,24 +33,35 @@ class NoticeModel {
       expiresAt != null && DateTime.now().isAfter(expiresAt!);
 
   factory NoticeModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
     return NoticeModel(
-      id: json['id'] as String,
-      title: json['title'] as String,
-      description: json['description'] as String,
-      postedBy: json['posted_by'] as String,
-      targetAudience: json['target_audience'] as String,
-      postedAt: DateTime.parse(json['posted_at'] as String),
-      expiresAt: json['expires_at'] != null
-          ? DateTime.parse(json['expires_at'] as String)
-          : null,
-      isImportant: json['is_important'] as bool? ?? false,
-      attachmentUrl: json['attachment_url'] as String?,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      title: json['title']?.toString() ?? 'Notice',
+      description: json['description']?.toString() ?? '',
+      postedBy: json['posted_by']?.toString() ?? 'Admin',
+      targetAudience: json['target_audience']?.toString() ?? 'all',
+      postedAt: parseDate(json['posted_at']),
+      expiresAt: json['expires_at'] != null ? parseDate(json['expires_at']) : null,
+      isImportant: parseBool(json['is_important']),
+      attachmentUrl: json['attachment_url']?.toString(),
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 
