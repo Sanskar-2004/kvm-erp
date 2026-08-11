@@ -14,6 +14,8 @@ import '../../features/fees/screens/parent_fee_screen.dart';
 import '../../features/sync/screens/conflict_logs_screen.dart';
 import '../../features/backup/screens/backup_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
+import '../../services/sync/sync_service.dart';
+import '../../features/dashboard/repositories/dashboard_repository.dart';
 import 'sync_status_badge.dart';
 
 class MainLayout extends ConsumerStatefulWidget {
@@ -25,6 +27,22 @@ class MainLayout extends ConsumerStatefulWidget {
 
 class _MainLayoutState extends ConsumerState<MainLayout> {
   int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(syncServiceProvider).runSyncSafe();
+        if (mounted) {
+          ref.invalidate(studentsListProvider);
+          ref.invalidate(dashboardMetricsProvider);
+        }
+      } catch (e) {
+        debugPrint("MainLayout initial sync warning: $e");
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

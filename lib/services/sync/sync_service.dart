@@ -54,13 +54,32 @@ class SyncService {
     }
   }
 
+  DateTime _parseDateSafe(dynamic value) {
+    if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
+    final str = value.toString().trim();
+    if (str.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+    final isoStr = str.replaceAll(' ', 'T');
+    return DateTime.tryParse(isoStr) ?? DateTime.tryParse(str) ?? DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
   Future<void> runSync() async {
     final session = await _authRepository.getSession();
     if (session == null) throw Exception("Cannot sync: User not authenticated natively.");
     final token = session.token;
 
-    await pushSyncQueue(token);
-    await fetchServerChanges(token);
+    try {
+      await pushSyncQueue(token);
+    } catch (e) {
+      log('Push Queue Warning: $e');
+    }
+
+    try {
+      await fetchServerChanges(token);
+    } catch (e) {
+      log('Fetch Server Changes Warning: $e');
+      rethrow;
+    }
+
     _studentRepository.invalidateStudentCache();
   }
 
@@ -85,7 +104,6 @@ class SyncService {
 
     if (queue.isEmpty) return;
 
-    // 1. Build exactly the { "students": [], "attendance": [] } structure locally
     Map<String, List<Map<String, dynamic>>> payload = {};
     List<int> corruptedJobIds = [];
 
@@ -94,7 +112,6 @@ class SyncService {
       if (!payload.containsKey(table)) payload[table] = [];
       try {
         final Map<String, dynamic> data = jsonDecode(job['data'].toString());
-        // Self-heal UPDATE jobs lacking primary keys by forcing the SQLite record_id in
         if (!data.containsKey('id') || data['id'] == null) {
            data['id'] = job['record_id'].toString();
         }
@@ -123,8 +140,6 @@ class SyncService {
       );
 
       if (response.statusCode == 200) {
-        // Node Server explicitly handled ALL conflicts and inserts natively. 
-        // We can safely mark local queues globally complete!
         for (var job in queue) {
            await db.update('sync_queue', {'synced': toDb(SyncStatus.synced), 'last_error': null}, where: 'id = ?', whereArgs: [job['id']]);
            await db.update(job['table_name'].toString(), {'is_synced': 1}, where: 'id = ?', whereArgs: [job['record_id']]);
@@ -172,7 +187,7 @@ class SyncService {
              for (final table in serverDataMap.keys) {
                 if (table == 'serverTime') continue;
 
-                // Fetch SQLite valid columns to prevent crash when backend pushes new schema fields (e.g. password_hash)
+                // Fetch SQLite valid columns to prevent crash when backend pushes new schema fields
                 final tableInfo = await txn.rawQuery('PRAGMA table_info("$table")');
                 if (tableInfo.isEmpty) continue; // Table doesn't exist locally, skip safely
                 
@@ -186,52 +201,63 @@ class SyncService {
 
                 final List<dynamic> rows = serverDataMap[table];
                 for (final rawRow in rows) {
-                   final row = Map<String, dynamic>.from(rawRow);
-                   row.removeWhere((key, value) => !validColumns.contains(key)); // Strip unknown columns
-                   
-                   // Defend against missing cloud properties crashing strict native NOT NULL SQLite rules 
-                   for (final colConfig in notNullColumns) {
-                      final colName = colConfig['name']!;
-                      if (row[colName] == null) {
-                         if (colConfig['type']!.contains('INT')) {
-                            row[colName] = 0;
-                         } else if (colConfig['type']!.contains('REAL') || colConfig['type']!.contains('FLOAT') || colConfig['type']!.contains('DOUBLE')) {
-                            row[colName] = 0.0;
-                         } else {
-                            row[colName] = '';
-                         }
-                      }
-                   }
+                   try {
+                     final row = Map<String, dynamic>.from(rawRow);
+                     row.removeWhere((key, value) => !validColumns.contains(key)); // Strip unknown columns
+                     
+                     // Defend against missing cloud properties crashing strict native NOT NULL SQLite rules 
+                     for (final colConfig in notNullColumns) {
+                        final colName = colConfig['name']!;
+                        if (row[colName] == null) {
+                           if (colConfig['type']!.contains('INT')) {
+                              row[colName] = 0;
+                           } else if (colConfig['type']!.contains('REAL') || colConfig['type']!.contains('FLOAT') || colConfig['type']!.contains('DOUBLE')) {
+                              row[colName] = 0.0;
+                           } else {
+                              row[colName] = '';
+                           }
+                        }
+                     }
 
-                   // Coerce id to string natively if server implicitly serves numeric integers
-                   if (row.containsKey('id') && row['id'] != null) {
-                       row['id'] = row['id'].toString();
-                   }
-                   
-                   // SQFlite absolutely rejects Dart `bool` types (true/false) because SQLite only has integers (1/0)
-                   // The postgres server naturally sends True/False JSON primitives natively
-                   row.updateAll((key, value) {
-                      if (value is bool) return value ? 1 : 0;
-                      return value;
-                   });
-                   
-                   // Ensure local database structurally mirrors changes correctly dropping older local rows
-                   final localResults = await txn.query(table, where: 'id = ?', whereArgs: [row['id']]);
-                   if (localResults.isEmpty) {
-                      if (row['is_deleted'] != 1) { // Drop dead cloud references
-                         await txn.insert(table, row);
-                      }
-                   } else {
-                      final localUpdatedAt = DateTime.parse(localResults.first['updated_at'].toString());
-                      final serverUpdatedAt = DateTime.parse(row['updated_at'].toString());
-                      
-                      if (serverUpdatedAt.isAfter(localUpdatedAt)) {
-                         await txn.update(table, row, where: 'id = ?', whereArgs: [row['id']]);
-                      }
+                     // Coerce id to string natively if server implicitly serves numeric integers
+                     if (row.containsKey('id') && row['id'] != null) {
+                         row['id'] = row['id'].toString();
+                     }
+                     
+                     // SQFlite absolutely rejects Dart `bool` types (true/false) because SQLite only has integers (1/0)
+                     row.updateAll((key, value) {
+                        if (value is bool) return value ? 1 : 0;
+                        return value;
+                     });
+
+                     final nowIso = DateTime.now().toIso8601String();
+                     if (validColumns.contains('updated_at') && (row['updated_at'] == null || row['updated_at'].toString().isEmpty)) {
+                         row['updated_at'] = nowIso;
+                     }
+                     
+                     final localResults = await txn.query(table, where: 'id = ?', whereArgs: [row['id']]);
+                     final isDeleted = (row['is_deleted'] == 1 || row['is_deleted'] == true || row['is_deleted'] == '1');
+                     
+                     if (localResults.isEmpty) {
+                        if (!isDeleted) { // Drop dead cloud references
+                           await txn.insert(table, row);
+                        }
+                     } else {
+                        final localUpdatedAt = _parseDateSafe(localResults.first['updated_at']);
+                        final serverUpdatedAt = _parseDateSafe(row['updated_at']);
+                        
+                        if (serverUpdatedAt.isAfter(localUpdatedAt) || serverUpdatedAt.isAtSameMomentAs(localUpdatedAt)) {
+                           await txn.update(table, row, where: 'id = ?', whereArgs: [row['id']]);
+                        }
+                     }
+                   } catch (rowErr) {
+                     log('Row sync error in table $table: $rowErr');
                    }
                 }
              }
           });
+
+          await prefs.setInt('last_sync_at', DateTime.now().millisecondsSinceEpoch);
        } else {
          throw Exception("Pull Error: ${response.body}");
        }
