@@ -69,6 +69,10 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: const Text('Financial Overview'),
         actions: [
           IconButton(

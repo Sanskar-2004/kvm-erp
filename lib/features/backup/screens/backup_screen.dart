@@ -65,7 +65,13 @@ class _BackupScreenState extends ConsumerState<BackupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('System Backup & Restore')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        title: const Text('System Backup & Restore'),
+      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(

@@ -263,6 +263,10 @@ class _StudentFeeDetailScreenState extends ConsumerState<StudentFeeDetailScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: Text(widget.studentName),
         actions: [
           DropdownButton<String>(
