@@ -128,7 +128,7 @@ exports.syncPull = async (req, res) => {
             try {
                 if (isInitialSync) {
                     // For initial sync, pull all active records
-                    const result = await db.query(`SELECT * FROM "${table}" WHERE is_deleted = 0 OR is_deleted IS NULL`);
+                    const result = await db.query(`SELECT * FROM "${table}" WHERE (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0')`);
                     pullPayload[table] = result.rows.length > 0 ? result.rows : [];
                 } else {
                     // Try pulling with updated_at delta

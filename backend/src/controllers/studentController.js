@@ -4,7 +4,7 @@ const db = require('../config/db');
 exports.getAllStudents = async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT * FROM students WHERE is_deleted = 0 OR is_deleted IS NULL ORDER BY name ASC`
+            `SELECT * FROM students WHERE (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0') ORDER BY name ASC`
         );
 
         res.json({
@@ -58,7 +58,7 @@ exports.updateStudentStatus = async (req, res) => {
 exports.getPendingAdmissions = async (req, res) => {
     try {
         const result = await db.query(
-            `SELECT * FROM students WHERE status = 'pending' AND is_deleted = false ORDER BY created_at DESC`
+            `SELECT * FROM students WHERE status = 'pending' AND (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0') ORDER BY created_at DESC`
         );
 
         res.json({

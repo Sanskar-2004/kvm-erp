@@ -4,8 +4,8 @@ const bcrypt = require('bcrypt');
 // GET /api/admin/metrics — Overall dashboard statistics
 exports.getDashboardMetrics = async (req, res) => {
     try {
-        const studentsRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (status = 'approved' OR status IS NULL)`);
-        const feesRes = await db.query(`SELECT COALESCE(SUM(amount_due - amount_paid), 0) AS total_due FROM student_fees WHERE status != 'PAID' AND (is_deleted = 0 OR is_deleted IS NULL)`);
+        const studentsRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0') AND (status = 'approved' OR status IS NULL)`);
+        const feesRes = await db.query(`SELECT COALESCE(SUM(amount_due - amount_paid), 0) AS total_due FROM student_fees WHERE status != 'PAID' AND (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0')`);
         
         let attendancePct = 0.0;
         try {
@@ -16,7 +16,7 @@ exports.getDashboardMetrics = async (req, res) => {
             attendancePct = totalAtt > 0 ? (presentAtt / totalAtt) * 100 : 0.0;
         } catch (_) {}
 
-        const pendingRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE status = 'pending' AND (is_deleted = 0 OR is_deleted IS NULL)`);
+        const pendingRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE status = 'pending' AND (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0')`);
 
         const totalStudents = parseInt(studentsRes.rows[0]?.count || '0');
         const pendingFees = parseFloat(feesRes.rows[0]?.total_due || '0');

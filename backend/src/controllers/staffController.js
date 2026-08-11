@@ -55,7 +55,7 @@ exports.createStaff = async (req, res) => {
 
 exports.getAllStaff = async (req, res) => {
     try {
-        const result = await db.query("SELECT * FROM staff WHERE is_deleted = 0 ORDER BY created_at DESC");
+        const result = await db.query("SELECT * FROM staff WHERE (is_deleted IS NULL OR is_deleted::text = 'false' OR is_deleted::text = '0') ORDER BY name ASC");
         res.json({ status: 'success', data: result.rows });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
