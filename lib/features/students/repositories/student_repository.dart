@@ -1,8 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:http/http.dart' as http;
 import 'dart:convert';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../auth/repositories/auth_repository.dart';
 
 final studentRepositoryProvider = Provider<StudentRepository>((ref) {
   return StudentRepository(SQLiteService());
@@ -12,7 +16,6 @@ class StudentRepository {
   final SQLiteService _dbService;
   
   // IN-MEMORY CACHING
-  // This prevents frequent DB IO hits when scrolling through student lists
   List<StudentModel>? _cachedStudents;
 
   StudentRepository(this._dbService);
@@ -20,33 +23,70 @@ class StudentRepository {
   /// Fetch all active students (ignores soft-deleted) with Lazy Loading / Pagination Support
   Future<List<StudentModel>> getAllStudents({
     bool forceRefresh = false, 
-    int limit = 20, 
+    int limit = 500, 
     int offset = 0
   }) async {
-    // Return cache immediately if valid AND we are requesting the initial chunk basically
-    if (!forceRefresh && _cachedStudents != null && offset == 0 && _cachedStudents!.length >= limit) {
-      return _cachedStudents!.take(limit).toList();
+    if (!forceRefresh && _cachedStudents != null && offset == 0 && _cachedStudents!.isNotEmpty) {
+      return _cachedStudents!;
     }
 
-    final db = await _dbService.database;
-    final results = await db.query(
-      'students', 
-      where: 'is_deleted = ? AND (status = ? OR status IS NULL)', 
-      whereArgs: [0, 'approved'],
-      limit: limit,
-      offset: offset,
-      orderBy: 'name ASC',
-    );
-    
-    final fetched = results.map((e) => StudentModel.fromJson(e)).toList();
-    
-    if (offset == 0) {
-      _cachedStudents = fetched; // overwrite baseline cache
-    } else if (_cachedStudents != null) {
-      _cachedStudents!.addAll(fetched); // incrementally append
+    if (kIsWeb) {
+      final webFetched = await _fetchStudentsFromApi();
+      if (webFetched != null && webFetched.isNotEmpty) {
+        _cachedStudents = webFetched;
+        return webFetched;
+      }
     }
-    
-    return fetched;
+
+    try {
+      final db = await _dbService.database;
+      final results = await db.query(
+        'students', 
+        where: 'is_deleted = ? OR is_deleted IS NULL', 
+        whereArgs: [0],
+        limit: limit,
+        offset: offset,
+        orderBy: 'name ASC',
+      );
+      
+      final fetched = results.map((e) => StudentModel.fromJson(e)).toList();
+      
+      if (fetched.isNotEmpty) {
+        if (offset == 0) _cachedStudents = fetched;
+        return fetched;
+      }
+    } catch (e) {
+      debugPrint("SQLite query error: $e");
+    }
+
+    // Direct HTTP API Fallback
+    final fallbackFetched = await _fetchStudentsFromApi();
+    if (fallbackFetched != null) {
+      _cachedStudents = fallbackFetched;
+      return fallbackFetched;
+    }
+
+    return _cachedStudents ?? [];
+  }
+
+  Future<List<StudentModel>?> _fetchStudentsFromApi() async {
+    try {
+      final session = await AuthRepository().getSession();
+      if (session == null) return null;
+      final response = await http.get(
+        Uri.parse('$BASE_URL/students'),
+        headers: {'Authorization': 'Bearer ${session.token}'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final List list = data['students'] ?? [];
+        return list.map((e) => StudentModel.fromJson(Map<String, dynamic>.from(e))).toList();
+      }
+    } catch (e) {
+      debugPrint("API students fetch error: $e");
+    }
+    return null;
   }
 
   /// Exposed manual trigger to clear cache natively after heavy Bulk Sync Pulls

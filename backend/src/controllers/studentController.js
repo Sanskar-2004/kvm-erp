@@ -1,5 +1,23 @@
 const db = require('../config/db');
 
+// GET /api/students — Fetch all active students
+exports.getAllStudents = async (req, res) => {
+    try {
+        const result = await db.query(
+            `SELECT * FROM students WHERE is_deleted = 0 OR is_deleted IS NULL ORDER BY name ASC`
+        );
+
+        res.json({
+            status: 'success',
+            students: result.rows
+        });
+
+    } catch (e) {
+        console.error('[Get All Students Error]', e);
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+};
+
 // PATCH /api/students/:id/status — Admin approves or rejects admission
 exports.updateStudentStatus = async (req, res) => {
     try {

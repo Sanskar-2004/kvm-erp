@@ -1,6 +1,42 @@
 const db = require('../config/db');
 const bcrypt = require('bcrypt');
 
+// GET /api/admin/metrics — Overall dashboard statistics
+exports.getDashboardMetrics = async (req, res) => {
+    try {
+        const studentsRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE (is_deleted = 0 OR is_deleted IS NULL) AND (status = 'approved' OR status IS NULL)`);
+        const feesRes = await db.query(`SELECT COALESCE(SUM(amount_due - amount_paid), 0) AS total_due FROM student_fees WHERE status != 'PAID' AND (is_deleted = 0 OR is_deleted IS NULL)`);
+        
+        let attendancePct = 0.0;
+        try {
+            const todayStr = new Date().toISOString().split('T')[0];
+            const attendanceRes = await db.query(`SELECT COUNT(CASE WHEN status = 'present' THEN 1 END) AS present, COUNT(id) AS total FROM attendance WHERE date LIKE $1`, [`${todayStr}%`]);
+            const presentAtt = parseInt(attendanceRes.rows[0]?.present || '0');
+            const totalAtt = parseInt(attendanceRes.rows[0]?.total || '0');
+            attendancePct = totalAtt > 0 ? (presentAtt / totalAtt) * 100 : 0.0;
+        } catch (_) {}
+
+        const pendingRes = await db.query(`SELECT COUNT(id) AS count FROM students WHERE status = 'pending' AND (is_deleted = 0 OR is_deleted IS NULL)`);
+
+        const totalStudents = parseInt(studentsRes.rows[0]?.count || '0');
+        const pendingFees = parseFloat(feesRes.rows[0]?.total_due || '0');
+        const pendingAdmissions = parseInt(pendingRes.rows[0]?.count || '0');
+
+        res.json({
+            status: 'success',
+            data: {
+                totalStudents,
+                pendingFees,
+                attendancePercentage: attendancePct,
+                pendingAdmissions
+            }
+        });
+    } catch (e) {
+        console.error('[Dashboard Metrics Error]', e);
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+};
+
 // GET /api/admin/finance-summary — Admin financial overview
 exports.getFinanceSummary = async (req, res) => {
     try {
