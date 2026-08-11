@@ -263,8 +263,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   Widget _buildDemoChip(String roleName, String username, String password, Color color) {
     return ActionChip(
-      avatar: Icon(Icons.person_rounded, size: 14, color: color),
-      label: Text(roleName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+      avatar: Icon(Icons.key_rounded, size: 14, color: color),
+      label: Text(
+        '$roleName ($password)',
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: color),
+      ),
+      tooltip: 'User: $username | Password: $password',
       backgroundColor: color.withOpacity(0.08),
       side: BorderSide(color: color.withOpacity(0.2)),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -272,6 +276,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() {
           _usernameController.text = username;
           _passwordController.text = password;
+          _obscurePassword = false; // Show password so user can see it filled
         });
         _handleLogin();
       },
