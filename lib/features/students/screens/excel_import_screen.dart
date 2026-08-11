@@ -142,7 +142,7 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.maybePop(context),
         ),
         title: const Text('Import from Excel'),
         actions: [

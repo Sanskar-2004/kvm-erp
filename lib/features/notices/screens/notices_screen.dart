@@ -111,12 +111,10 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: const Text('Notices & Alerts'),
       ),
       floatingActionButton: widget.canCreate

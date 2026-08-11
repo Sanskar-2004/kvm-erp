@@ -375,7 +375,7 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.maybePop(context),
         ),
         title: Text(widget.isEditing ? 'Edit Student' : 'Add New Student'),
         actions: [

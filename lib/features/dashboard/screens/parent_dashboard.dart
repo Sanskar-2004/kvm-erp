@@ -297,6 +297,10 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: const Text('Parent Dashboard'),
         actions: [
           DropdownButton<String>(

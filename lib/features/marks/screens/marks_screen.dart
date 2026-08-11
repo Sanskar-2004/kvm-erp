@@ -224,11 +224,10 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.pop(context))
-            : null,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: const Text('Marks Manager'),
         bottom: TabBar(
           controller: _tabController,

@@ -87,12 +87,10 @@ class _AcademicsScreenState extends ConsumerState<AcademicsScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        leading: Navigator.canPop(context)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         title: const Text('Academics Center'),
         backgroundColor: Colors.indigo[800],
         elevation: 0,
