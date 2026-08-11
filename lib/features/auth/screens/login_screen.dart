@@ -215,6 +215,40 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                           ),
                         ),
+
+                        const SizedBox(height: 24),
+                        const Divider(height: 1),
+                        const SizedBox(height: 16),
+
+                        // Quick Demo Logins Header
+                        Row(
+                          children: [
+                            Icon(Icons.flash_on_rounded, size: 16, color: Colors.orange[700]),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Demo Logins (1-Click Fill & Login)',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+
+                        // Demo Chips Wrap
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _buildDemoChip('Admin', 'admin@kvm.edu', 'admin', Colors.red),
+                            _buildDemoChip('Teacher', '9977121549@kvm.edu', 'teacher', Colors.blue),
+                            _buildDemoChip('Accountant', '7489612398@kvm.edu', 'accountant', Colors.teal),
+                            _buildDemoChip('Student', '4900@kvm.edu', 'student', Colors.purple),
+                            _buildDemoChip('Parent', 'p4900@kvm.edu', 'parent', Colors.orange),
+                          ],
+                        ),
                       ],
                     ),
                   ),
@@ -224,6 +258,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDemoChip(String roleName, String username, String password, Color color) {
+    return ActionChip(
+      avatar: Icon(Icons.person_rounded, size: 14, color: color),
+      label: Text(roleName, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
+      backgroundColor: color.withOpacity(0.08),
+      side: BorderSide(color: color.withOpacity(0.2)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      onPressed: () {
+        setState(() {
+          _usernameController.text = username;
+          _passwordController.text = password;
+        });
+        _handleLogin();
+      },
     );
   }
 
