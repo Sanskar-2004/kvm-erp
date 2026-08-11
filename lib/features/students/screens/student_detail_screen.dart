@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../models/student_model.dart';
@@ -38,6 +39,10 @@ class _StudentDetailState extends ConsumerState<StudentDetailScreen> {
   }
 
   Future<void> _loadStudentData() async {
+    if (kIsWeb) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     try {
       final db = await SQLiteService().database;
 

@@ -54,22 +54,29 @@ class StaffAssignmentModel {
   }
 
   factory StaffAssignmentModel.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime.now();
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime.now();
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime.now();
+    }
+
     return StaffAssignmentModel(
       id: map['id']?.toString() ?? '',
       staffId: map['staff_id']?.toString() ?? '',
       classId: map['class_id']?.toString() ?? '',
-      subject: map['subject'] ?? '',
-      academicYear: map['academic_year'] ?? '2026-27',
-      maxPeriodsPerDay: map['max_periods_per_day'] != null ? int.parse(map['max_periods_per_day'].toString()) : 6,
-      maxPeriodsPerWeek: map['max_periods_per_week'] != null ? int.parse(map['max_periods_per_week'].toString()) : 30,
-      isClassTeacher: map['is_class_teacher'] == 1 || map['is_class_teacher'] == true,
+      subject: map['subject']?.toString() ?? '',
+      academicYear: map['academic_year']?.toString() ?? '2026-27',
+      maxPeriodsPerDay: map['max_periods_per_day'] != null ? int.tryParse(map['max_periods_per_day'].toString()) ?? 6 : 6,
+      maxPeriodsPerWeek: map['max_periods_per_week'] != null ? int.tryParse(map['max_periods_per_week'].toString()) ?? 30 : 30,
+      isClassTeacher: map['is_class_teacher'] == 1 || map['is_class_teacher'] == true || map['is_class_teacher']?.toString().toLowerCase() == 'true',
       deviceId: map['device_id']?.toString() ?? 'system',
-      isSynced: map['is_synced'] == 1 || map['is_synced'] == true,
-      isDeleted: map['is_deleted'] == 1 || map['is_deleted'] == true,
-      createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : DateTime.now(),
-      updatedAt: map['updated_at'] != null ? DateTime.parse(map['updated_at']) : DateTime.now(),
-      staffName: map['staff_name'],
-      role: map['role'],
+      isSynced: map['is_synced'] == 1 || map['is_synced'] == true || map['is_synced']?.toString().toLowerCase() == 'true',
+      isDeleted: map['is_deleted'] == 1 || map['is_deleted'] == true || map['is_deleted']?.toString().toLowerCase() == 'true',
+      createdAt: parseDate(map['created_at']),
+      updatedAt: parseDate(map['updated_at']),
+      staffName: map['staff_name']?.toString(),
+      role: map['role']?.toString(),
     );
   }
 

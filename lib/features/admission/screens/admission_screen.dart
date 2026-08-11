@@ -1,18 +1,42 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import '../../../services/db/sqlite_service.dart';
 import '../../../models/student_model.dart';
 import '../../students/screens/student_detail_screen.dart';
 import '../../students/screens/students_screen.dart';
 import '../../dashboard/repositories/dashboard_repository.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../auth/repositories/auth_repository.dart';
 
-/// Fetches pending students from LOCAL SQLite database
+/// Fetches pending students from API on Web or LOCAL SQLite database
 final pendingAdmissionsProvider = FutureProvider.autoDispose<List<StudentModel>>((ref) async {
+  if (kIsWeb) {
+    try {
+      final session = await ref.read(authRepositoryProvider).getSession();
+      if (session != null) {
+        final response = await http.get(
+          Uri.parse('$BASE_URL/students/pending'),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        );
+        if (response.statusCode == 200) {
+          final data = jsonDecode(response.body);
+          final List list = data['students'] ?? [];
+          return list.map((e) => StudentModel.fromJson(Map<String, dynamic>.from(e))).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint("Web pending admissions error: $e");
+    }
+  }
+
   try {
     final db = await SQLiteService().database;
     final rows = await db.query(
       'students',
-      where: 'status = ? AND is_deleted = 0',
+      where: 'status = ? AND (is_deleted = 0 OR is_deleted IS NULL)',
       whereArgs: ['pending'],
       orderBy: 'admission_date DESC',
     );
@@ -27,19 +51,31 @@ class AdmissionScreen extends ConsumerWidget {
 
   Future<void> _updateStatus(String studentId, String status, WidgetRef ref, BuildContext context) async {
     try {
-      final db = await SQLiteService().database;
-      await db.update(
-        'students',
-        {
-          'status': status,
-          'updated_at': DateTime.now().toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [studentId],
-      );
-
-      // Queue sync
-      SQLiteService.onSyncQueued.add(null);
+      if (kIsWeb) {
+        final session = await ref.read(authRepositoryProvider).getSession();
+        if (session != null) {
+          await http.patch(
+            Uri.parse('$BASE_URL/students/$studentId/status'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ${session.token}',
+            },
+            body: jsonEncode({'status': status}),
+          );
+        }
+      } else {
+        final db = await SQLiteService().database;
+        await db.update(
+          'students',
+          {
+            'status': status,
+            'updated_at': DateTime.now().toIso8601String(),
+          },
+          where: 'id = ?',
+          whereArgs: [studentId],
+        );
+        SQLiteService.onSyncQueued.add(null);
+      }
 
       ref.invalidate(pendingAdmissionsProvider);
       ref.invalidate(studentsListProvider);

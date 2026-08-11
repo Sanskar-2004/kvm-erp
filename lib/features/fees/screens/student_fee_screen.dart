@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_constants.dart';
@@ -32,10 +33,15 @@ class _StudentFeeScreenState extends ConsumerState<StudentFeeScreen> {
   }
 
   Future<void> _loadMyFees() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session == null) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    if (kIsWeb) {
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 

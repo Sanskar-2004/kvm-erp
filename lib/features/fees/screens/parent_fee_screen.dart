@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
@@ -30,10 +31,10 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
   }
 
   Future<void> _loadChildrenFees() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session == null) {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
       return;
     }
 
@@ -48,6 +49,13 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
       if (childResp.statusCode == 200) {
         final data = jsonDecode(childResp.body);
         children = List<Map<String, dynamic>>.from(data['children'] ?? []);
+      }
+
+      if (mounted) setState(() => _children = children);
+
+      if (kIsWeb) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
       }
 
       // If no children linked remotely, match by phone locally

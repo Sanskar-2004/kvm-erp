@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:convert';
@@ -34,57 +35,90 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
   }
 
   Future<void> _loadFeeData() async {
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
     try {
-      // Step 1: Try to sync fees from backend (background-safe)
-      try {
-        final session = await ref.read(authRepositoryProvider).getSession();
-        if (session != null) {
+      final session = await ref.read(authRepositoryProvider).getSession();
+      if (session != null) {
+        try {
           final response = await http.get(
             Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
             headers: {'Authorization': 'Bearer ${session.token}'},
           ).timeout(const Duration(seconds: 8));
+
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
-            final rawFees = List<Map<String, dynamic>>.from(
-                data['data']['student_fees'] ?? []);
-            if (rawFees.isNotEmpty) {
-              await SQLiteService().upsertStudentFees(rawFees);
+            final rawFees = List<Map<String, dynamic>>.from(data['data']?['student_fees'] ?? []);
+            
+            if (kIsWeb || rawFees.isNotEmpty) {
+              final map = <String, Map<String, dynamic>>{};
+              for (var row in rawFees) {
+                final studentId = row['student_id']?.toString() ?? '';
+                final due = (row['amount_due'] as num?)?.toDouble() ?? 0.0;
+                final paid = (row['amount_paid'] as num?)?.toDouble() ?? 0.0;
+                if (studentId.isNotEmpty) {
+                  if (!map.containsKey(studentId)) {
+                    map[studentId] = {
+                      'student_id': studentId,
+                      'total_amount': due,
+                      'total_paid': paid,
+                      'total_due': due - paid,
+                      'last_paid': row['paid_date'],
+                      'academic_year': row['academic_year'] ?? _selectedYear,
+                    };
+                  } else {
+                    map[studentId]!['total_amount'] = (map[studentId]!['total_amount'] as double) + due;
+                    map[studentId]!['total_paid'] = (map[studentId]!['total_paid'] as double) + paid;
+                    map[studentId]!['total_due'] = (map[studentId]!['total_due'] as double) + (due - paid);
+                  }
+                }
+              }
+              if (mounted) {
+                setState(() {
+                  _feeMap = map;
+                  _isLoading = false;
+                });
+              }
+              if (kIsWeb) return;
             }
           }
+        } catch (syncError) {
+          debugPrint('[FeesScreen] API fee pull warning: $syncError');
         }
-      } catch (syncError) {
-        debugPrint('[FeesScreen] Sync pull failed (offline?): $syncError');
       }
 
-      // Step 2: Query local SQLite filtered by selected academic year
-      final db = await SQLiteService().database;
-      final fees = await db.rawQuery('''
-        SELECT sf.student_id, s.name as student_name, s.class_id,
-               SUM(sf.amount_due) as total_amount,
-               SUM(sf.amount_paid) as total_paid,
-               SUM(sf.amount_due - sf.amount_paid) as total_due,
-               MAX(sf.paid_date) as last_paid,
-               sf.academic_year
-        FROM student_fees sf
-        LEFT JOIN students s ON s.id = sf.student_id
-        WHERE sf.is_deleted = 0 AND sf.academic_year = ?
-        GROUP BY sf.student_id, sf.academic_year
-        ORDER BY s.class_id ASC, s.name ASC
-      ''', [_selectedYear]);
+      if (!kIsWeb) {
+        final db = await SQLiteService().database;
+        final fees = await db.rawQuery('''
+          SELECT sf.student_id, s.name as student_name, s.class_id,
+                 SUM(sf.amount_due) as total_amount,
+                 SUM(sf.amount_paid) as total_paid,
+                 SUM(sf.amount_due - sf.amount_paid) as total_due,
+                 MAX(sf.paid_date) as last_paid,
+                 sf.academic_year
+          FROM student_fees sf
+          LEFT JOIN students s ON s.id = sf.student_id
+          WHERE sf.is_deleted = 0 AND sf.academic_year = ?
+          GROUP BY sf.student_id, sf.academic_year
+          ORDER BY s.class_id ASC, s.name ASC
+        ''', [_selectedYear]);
 
-      final map = <String, Map<String, dynamic>>{};
-      for (var row in fees) {
-        map[row['student_id'] as String] = row;
+        final map = <String, Map<String, dynamic>>{};
+        for (var row in fees) {
+          map[row['student_id'] as String] = row;
+        }
+
+        if (mounted) {
+          setState(() {
+            _feeMap = map;
+            _isLoading = false;
+          });
+        }
+      } else {
+        if (mounted) setState(() => _isLoading = false);
       }
-
-      setState(() {
-        _feeMap = map;
-        _isLoading = false;
-      });
     } catch (e) {
       debugPrint('Fee load error: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
