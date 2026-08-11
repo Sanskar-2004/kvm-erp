@@ -5,7 +5,7 @@ import 'dart:convert';
 import '../../../../services/db/sqlite_service.dart';
 import '../../dashboard/services/dashboard_service.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../auth/repositories/auth_repository.dart';
+import '../../auth/repositories/auth_repository.dart';
 
 // Provides the repository bridging DB and Providers.
 final dashboardRepositoryProvider = Provider<DashboardRepository>((ref) {

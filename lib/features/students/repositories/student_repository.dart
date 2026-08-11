@@ -6,7 +6,7 @@ import 'dart:convert';
 import '../../../../models/student_model.dart';
 import '../../../../services/db/sqlite_service.dart';
 import '../../../../core/constants/app_constants.dart';
-import '../../../auth/repositories/auth_repository.dart';
+import '../../auth/repositories/auth_repository.dart';
 
 final studentRepositoryProvider = Provider<StudentRepository>((ref) {
   return StudentRepository(SQLiteService());
