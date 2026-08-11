@@ -68,41 +68,54 @@ class StudentModel {
   }) : updatedAt = updatedAt ?? DateTime.now();
 
   factory StudentModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
     return StudentModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      rollNumber: json['roll_number'] as String,
-      classId: json['class_id'] as String,
-      email: json['email'] as String?,
-      phone: json['phone'] as String,
-      parentName: json['parent_name'] as String,
-      parentPhone: json['parent_phone'] as String,
-      parentOccupation: json['parent_occupation'] as String?,
-      motherName: json['mother_name'] as String?,
-      motherPhone: json['mother_phone'] as String?,
-      profileImageUrl: json['profile_image_url'] as String?,
-      dateOfBirth: DateTime.parse(json['date_of_birth'] as String),
-      gender: json['gender'] as String,
-      caste: json['caste'] as String?,
-      category: json['category'] as String?,
-      religion: json['religion'] as String?,
-      nationality: json['nationality'] as String?,
-      bloodGroup: json['blood_group'] as String?,
-      address: json['address'] as String,
-      city: json['city'] as String?,
-      state: json['state'] as String?,
-      pincode: json['pincode'] as String?,
-      previousSchool: json['previous_school'] as String?,
-      previousClass: json['previous_class'] as String?,
-      aadharNumber: json['aadhar_number'] as String?,
-      admissionDate: DateTime.parse(json['admission_date'] as String),
-      status: json['status'] as String? ?? 'approved',
-      updatedAt: json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'] as String)
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: json['name']?.toString() ?? 'Student',
+      rollNumber: json['roll_number']?.toString() ?? 'N/A',
+      classId: json['class_id']?.toString() ?? 'Unknown',
+      email: json['email']?.toString(),
+      phone: json['phone']?.toString() ?? 'N/A',
+      parentName: json['parent_name']?.toString() ?? 'N/A',
+      parentPhone: json['parent_phone']?.toString() ?? 'N/A',
+      parentOccupation: json['parent_occupation']?.toString(),
+      motherName: json['mother_name']?.toString(),
+      motherPhone: json['mother_phone']?.toString(),
+      profileImageUrl: json['profile_image_url']?.toString(),
+      dateOfBirth: parseDate(json['date_of_birth']),
+      gender: json['gender']?.toString() ?? 'Male',
+      caste: json['caste']?.toString(),
+      category: json['category']?.toString(),
+      religion: json['religion']?.toString(),
+      nationality: json['nationality']?.toString(),
+      bloodGroup: json['blood_group']?.toString(),
+      address: json['address']?.toString() ?? 'N/A',
+      city: json['city']?.toString(),
+      state: json['state']?.toString(),
+      pincode: json['pincode']?.toString(),
+      previousSchool: json['previous_school']?.toString(),
+      previousClass: json['previous_class']?.toString(),
+      aadharNumber: json['aadhar_number']?.toString(),
+      admissionDate: parseDate(json['admission_date']),
+      status: json['status']?.toString() ?? 'approved',
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 

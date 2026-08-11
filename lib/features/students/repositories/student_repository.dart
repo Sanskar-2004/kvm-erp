@@ -73,6 +73,7 @@ class StudentRepository {
     try {
       final session = await AuthRepository().getSession();
       if (session == null) return null;
+      
       final response = await http.get(
         Uri.parse('$BASE_URL/students'),
         headers: {'Authorization': 'Bearer ${session.token}'},
@@ -82,6 +83,17 @@ class StudentRepository {
         final data = jsonDecode(response.body);
         final List list = data['students'] ?? [];
         return list.map((e) => StudentModel.fromJson(Map<String, dynamic>.from(e))).toList();
+      } else {
+        // Fallback to sync pull endpoint if role-restricted
+        final syncRes = await http.get(
+          Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
+          headers: {'Authorization': 'Bearer ${session.token}'},
+        );
+        if (syncRes.statusCode == 200) {
+          final data = jsonDecode(syncRes.body);
+          final List list = data['data']?['students'] ?? [];
+          return list.map((e) => StudentModel.fromJson(Map<String, dynamic>.from(e))).toList();
+        }
       }
     } catch (e) {
       debugPrint("API students fetch error: $e");

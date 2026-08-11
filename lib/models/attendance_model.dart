@@ -28,21 +28,34 @@ class AttendanceModel {
   }) : updatedAt = updatedAt ?? DateTime.now();
 
   factory AttendanceModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
     return AttendanceModel(
-      id: json['id'] as String,
-      studentId: json['student_id'] as String,
-      classId: json['class_id'] as String,
-      date: DateTime.parse(json['date'] as String),
-      periodNumber: json['period_number'] as int?,
-      status: json['status'] as String,
-      remarks: json['remarks'] as String?,
-      markedBy: json['marked_by'] as String,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      studentId: json['student_id']?.toString() ?? '',
+      classId: json['class_id']?.toString() ?? '',
+      date: parseDate(json['date']),
+      periodNumber: json['period_number'] != null ? int.tryParse(json['period_number'].toString()) : null,
+      status: json['status']?.toString() ?? 'present',
+      remarks: json['remarks']?.toString(),
+      markedBy: json['marked_by']?.toString() ?? 'system',
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 

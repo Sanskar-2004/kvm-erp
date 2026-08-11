@@ -26,20 +26,33 @@ class UserModel {
   }) : updatedAt = updatedAt ?? DateTime.now();
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
     return UserModel(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      email: json['email'] as String,
-      phone: json['phone'] as String,
-      role: json['role'] as String,
-      profileImageUrl: json['profile_image_url'] as String?,
-      createdAt: DateTime.parse(json['created_at'] as String),
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      name: json['name']?.toString() ?? 'User',
+      email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      role: json['role']?.toString() ?? 'admin',
+      profileImageUrl: json['profile_image_url']?.toString(),
+      createdAt: parseDate(json['created_at']),
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 

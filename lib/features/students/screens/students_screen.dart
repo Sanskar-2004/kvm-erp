@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../repositories/student_repository.dart';
@@ -49,6 +50,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
   }
 
   Future<void> _loadTeacherClasses(String userId) async {
+    if (kIsWeb) return;
     try {
       final db = await SQLiteService().database;
       // Check timetable for classes this teacher teaches

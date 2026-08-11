@@ -41,28 +41,45 @@ class FeeModel {
       status != 'paid' && DateTime.now().isAfter(dueDate);
 
   factory FeeModel.fromJson(Map<String, dynamic> json) {
+    DateTime parseDate(dynamic val) {
+      if (val == null) return DateTime(2000, 1, 1);
+      final s = val.toString().trim();
+      if (s.isEmpty) return DateTime(2000, 1, 1);
+      return DateTime.tryParse(s.replaceAll(' ', 'T')) ?? DateTime.tryParse(s) ?? DateTime(2000, 1, 1);
+    }
+
+    bool parseBool(dynamic val) {
+      if (val == null) return false;
+      if (val is bool) return val;
+      if (val is num) return val == 1;
+      final s = val.toString().toLowerCase().trim();
+      return s == '1' || s == 'true';
+    }
+
+    double parseNum(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
     return FeeModel(
-      id: json['id'] as String,
-      studentId: json['student_id'] as String,
-      studentName: json['student_name'] as String,
-      classId: json['class_id'] as String,
-      feeType: json['fee_type'] as String,
-      amount: (json['amount'] as num).toDouble(),
-      paidAmount: (json['paid_amount'] as num).toDouble(),
-      dueAmount: (json['due_amount'] as num).toDouble(),
-      dueDate: DateTime.parse(json['due_date'] as String),
-      paidDate: json['paid_date'] != null
-          ? DateTime.parse(json['paid_date'] as String)
-          : null,
-      status: json['status'] as String,
-      transactionId: json['transaction_id'] as String?,
-      remarks: json['remarks'] as String?,
-      updatedAt: json['updated_at'] != null 
-          ? DateTime.parse(json['updated_at'] as String) 
-          : DateTime.now(),
-      deviceId: json['device_id'] as String? ?? 'unknown',
-      isSynced: (json['is_synced'] as int?) == 1,
-      isDeleted: (json['is_deleted'] as int?) == 1,
+      id: json['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      studentId: json['student_id']?.toString() ?? '',
+      studentName: json['student_name']?.toString() ?? json['name']?.toString() ?? 'Student',
+      classId: json['class_id']?.toString() ?? '',
+      feeType: json['fee_type']?.toString() ?? json['month']?.toString() ?? 'Tuition',
+      amount: parseNum(json['amount'] ?? json['amount_due']),
+      paidAmount: parseNum(json['paid_amount'] ?? json['amount_paid']),
+      dueAmount: parseNum(json['due_amount'] ?? ((parseNum(json['amount_due']) - parseNum(json['amount_paid'])))),
+      dueDate: parseDate(json['due_date']),
+      paidDate: json['paid_date'] != null ? parseDate(json['paid_date']) : null,
+      status: json['status']?.toString() ?? 'pending',
+      transactionId: json['transaction_id']?.toString(),
+      remarks: json['remarks']?.toString(),
+      updatedAt: parseDate(json['updated_at']),
+      deviceId: json['device_id']?.toString() ?? 'unknown',
+      isSynced: parseBool(json['is_synced']),
+      isDeleted: parseBool(json['is_deleted']),
     );
   }
 
