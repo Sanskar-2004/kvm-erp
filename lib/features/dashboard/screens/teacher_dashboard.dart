@@ -29,9 +29,6 @@ class _TeacherDashboardState extends ConsumerState<TeacherDashboard> {
   Future<void> _loadName() async {
     final session = await ref.read(authRepositoryProvider).getSession();
     if (session == null) return;
-    if (session.name.isNotEmpty && mounted) {
-      setState(() => _teacherName = session.name.split(' ').first);
-    }
     try {
       final db = SQLiteService();
       final res = await db.query('staff', where: 'user_id = ? OR id = ?', whereArgs: [session.userId, session.userId], limit: 1);
