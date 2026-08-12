@@ -123,12 +123,11 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
     final studentsAsync = ref.watch(studentsListProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: Text(_userRole == 'teacher' ? 'My Students' : 'All Students'),
         actions: [
           if (_userRole == 'admin')
@@ -147,7 +146,7 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
               },
             ),
         ],
-      ),
+      ) : null,
       floatingActionButton: FloatingActionButton.extended(
         heroTag: null,
         onPressed: () async {

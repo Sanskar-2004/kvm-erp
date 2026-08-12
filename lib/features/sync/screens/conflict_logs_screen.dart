@@ -49,7 +49,7 @@ class _ConflictLogsScreenState extends ConsumerState<ConflictLogsScreen> {
             onPressed: () => Navigator.maybePop(context),
           ) : null,
           automaticallyImplyLeading: false,
-          title: const Text('System Audit & Dead Queues'),
+          title: Navigator.canPop(context) ? const Text('System Audit & Dead Queues') : null,
           actions: [
             IconButton(
               icon: const Icon(Icons.refresh),

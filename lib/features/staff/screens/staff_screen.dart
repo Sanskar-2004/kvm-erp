@@ -37,12 +37,11 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Staff Directory'),
         backgroundColor: Colors.indigo[800],
         actions: [
@@ -54,12 +53,12 @@ class _StaffScreenState extends ConsumerState<StaffScreen> {
                 MaterialPageRoute(builder: (_) => const AddStaffScreen()),
               );
               if (result == true) {
-                setState(() {}); // refresh
+                setState(() {});
               }
             },
-          )
+          ),
         ],
-      ),
+      ) : null,
       body: Column(
         children: [
           // Filter Row

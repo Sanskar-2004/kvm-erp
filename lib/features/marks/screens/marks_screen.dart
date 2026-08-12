@@ -229,7 +229,9 @@ class _MarksScreenState extends ConsumerState<MarksScreen>
           onPressed: () => Navigator.maybePop(context),
         ) : null,
         automaticallyImplyLeading: false,
-        title: const Text('Marks Manager'),
+        title: Navigator.canPop(context) ? const Text('Marks Manager') : null,
+        elevation: 0,
+        backgroundColor: Colors.transparent,
         bottom: TabBar(
           controller: _tabController,
           labelColor: Colors.blue[800],

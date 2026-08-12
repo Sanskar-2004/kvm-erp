@@ -73,7 +73,9 @@ class _TimetableScreenState extends ConsumerState<TimetableScreen> {
             onPressed: () => Navigator.maybePop(context),
           ) : null,
           automaticallyImplyLeading: false,
-          title: const Text('My Timetable'),
+          title: Navigator.canPop(context) ? const Text('My Timetable') : null,
+          elevation: 0,
+          backgroundColor: Colors.transparent,
           actions: [
             IconButton(icon: const Icon(Icons.refresh_rounded), onPressed: _loadTimetable),
           ],

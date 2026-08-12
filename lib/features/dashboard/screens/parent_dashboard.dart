@@ -296,12 +296,11 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Parent Dashboard'),
         actions: [
           DropdownButton<String>(
@@ -321,7 +320,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           ),
           const SizedBox(width: 8),
         ],
-      ),
+      ) : null,
       body: RefreshIndicator(
         onRefresh: _loadChildren,
         child: SingleChildScrollView(

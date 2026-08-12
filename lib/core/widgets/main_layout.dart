@@ -12,7 +12,6 @@ import '../../features/fees/screens/fees_screen.dart';
 import '../../features/fees/screens/student_fee_screen.dart';
 import '../../features/fees/screens/parent_fee_screen.dart';
 import '../../features/sync/screens/conflict_logs_screen.dart';
-import '../../features/backup/screens/backup_screen.dart';
 import '../../features/auth/screens/login_screen.dart';
 import '../../services/sync/sync_service.dart';
 import '../../features/dashboard/repositories/dashboard_repository.dart';
@@ -42,6 +41,37 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         debugPrint("MainLayout initial sync warning: $e");
       }
     });
+  }
+
+  Future<void> _performLogout(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Logout'),
+        content: const Text('Are you sure you want to log out of KVM ERP?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Logout', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await ref.read(authProvider.notifier).logout();
+      if (context.mounted) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      }
+    }
   }
 
   @override
@@ -151,22 +181,25 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         break;
     }
 
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             // App name
             const Text(
               'KVM ERP',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             // Role badge
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 color: roleBadgeColor.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 role.name.toUpperCase(),
@@ -174,7 +207,7 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   color: roleBadgeColor,
-                  letterSpacing: 1,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
@@ -185,61 +218,37 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
         actions: [
           const SyncStatusBadge(),
           const SizedBox(width: 4),
-          // Explicit Logout Button
-          TextButton.icon(
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.red[600],
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              backgroundColor: Colors.red.withOpacity(0.08),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          // Explicit Logout Button (icon-only on mobile, full button on desktop)
+          if (isMobile)
+            IconButton(
+              icon: const Icon(Icons.logout_rounded, color: Colors.red, size: 20),
+              tooltip: 'Logout',
+              onPressed: () => _performLogout(context),
+            )
+          else
+            TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: Colors.red[600],
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                backgroundColor: Colors.red.withOpacity(0.08),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              icon: const Icon(Icons.logout_rounded, size: 16),
+              label: const Text(
+                'Logout',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              onPressed: () => _performLogout(context),
             ),
-            icon: const Icon(Icons.logout_rounded, size: 16),
-            label: const Text(
-              'Logout',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-            ),
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Confirm Logout'),
-                  content: const Text('Are you sure you want to log out of KVM ERP?'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('Logout', style: TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                ),
-              );
-              if (confirm == true) {
-                await ref.read(authProvider.notifier).logout();
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
-              }
-            },
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           // Profile avatar menu
           PopupMenuButton<String>(
             icon: CircleAvatar(
-              radius: 16,
+              radius: 15,
               backgroundColor: roleBadgeColor.withOpacity(0.15),
-              child:
-                  Icon(Icons.person_rounded, size: 18, color: roleBadgeColor),
+              child: Icon(Icons.person_rounded, size: 16, color: roleBadgeColor),
             ),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             offset: const Offset(0, 45),
             itemBuilder: (context) => [
               PopupMenuItem(
@@ -272,16 +281,9 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
                 ),
               ),
             ],
-            onSelected: (value) async {
+            onSelected: (value) {
               if (value == 'logout') {
-                await ref.read(authProvider.notifier).logout();
-                if (context.mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    (route) => false,
-                  );
-                }
+                _performLogout(context);
               }
             },
           ),

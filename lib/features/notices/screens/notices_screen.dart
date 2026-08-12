@@ -110,14 +110,13 @@ class _NoticesScreenState extends ConsumerState<NoticesScreen> {
     final noticesAsync = ref.watch(noticesListProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Notices & Alerts'),
-      ),
+      ) : null,
       floatingActionButton: widget.canCreate
           ? FloatingActionButton.extended(
               heroTag: 'notice_fab',

@@ -43,12 +43,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     final chatState = ref.watch(aiChatProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('AI Assistant'),
         actions: [
           IconButton(
@@ -56,7 +55,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
             onPressed: () => ref.read(aiChatProvider.notifier).clearChat(),
           ),
         ],
-      ),
+      ) : null,
       body: Column(
         children: [
           // Messages List

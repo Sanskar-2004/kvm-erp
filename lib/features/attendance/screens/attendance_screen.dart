@@ -167,14 +167,13 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
     final studentsAsync = ref.watch(studentRepositoryProvider).getAllStudents(limit: 500, offset: 0);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Mark Attendance'),
-      ),
+      ) : null,
       floatingActionButton: _isSaving
           ? const CircularProgressIndicator()
           : FloatingActionButton.extended(

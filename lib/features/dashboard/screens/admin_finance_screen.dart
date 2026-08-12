@@ -68,18 +68,17 @@ class _AdminFinanceScreenState extends ConsumerState<AdminFinanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Financial Overview'),
         actions: [
           IconButton(
               icon: const Icon(Icons.refresh), onPressed: _loadFinanceData),
         ],
-      ),
+      ) : null,
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(

@@ -105,14 +105,13 @@ class AdmissionScreen extends ConsumerWidget {
     final pendingAsync = ref.watch(pendingAdmissionsProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Admission Approvals'),
-      ),
+      ) : null,
       body: pendingAsync.when(
         data: (students) {
           if (students.isEmpty) {

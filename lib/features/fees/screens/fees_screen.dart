@@ -129,14 +129,13 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
         .getAllStudents(limit: 500, offset: 0);
 
     return Scaffold(
-      appBar: AppBar(
-        leading: Navigator.canPop(context) ? IconButton(
+      appBar: Navigator.canPop(context) ? AppBar(
+        leading: IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ) : null,
-        automaticallyImplyLeading: false,
+        ),
         title: const Text('Fee Management'),
-      ),
+      ) : null,
       body: FutureBuilder<List<StudentModel>>(
         future: studentsAsync,
         builder: (context, snapshot) {

@@ -92,8 +92,8 @@ class _AcademicsScreenState extends ConsumerState<AcademicsScreen>
           onPressed: () => Navigator.maybePop(context),
         ) : null,
         automaticallyImplyLeading: false,
-        title: const Text('Academics Center'),
-        backgroundColor: Colors.indigo[800],
+        title: Navigator.canPop(context) ? const Text('Academics Center') : null,
+        backgroundColor: Navigator.canPop(context) ? Colors.indigo[800] : Colors.transparent,
         elevation: 0,
         actions: [
           IconButton(
