@@ -219,7 +219,6 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
           ],
         ),
         centerTitle: false,
-        elevation: 0,
         actions: [
           const SyncStatusBadge(),
           const SizedBox(width: 4),
