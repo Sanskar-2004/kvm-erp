@@ -332,6 +332,10 @@ class _EditStaffScreenState extends ConsumerState<EditStaffScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Navigator.canPop(context) ? IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          onPressed: () => Navigator.maybePop(context),
+        ) : null,
         title: const Text('Edit Staff'),
         elevation: 0,
         backgroundColor: Colors.indigo[800],
