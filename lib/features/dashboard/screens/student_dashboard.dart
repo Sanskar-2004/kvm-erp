@@ -120,6 +120,7 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
 
   /// Background sync — if local data exists, refresh silently. If no local data, wait for sync then show.
   void _syncAndRefresh(dynamic session, String studentId, bool hadLocalData) async {
+    if (kIsWeb) return;
     try {
       await ref.read(syncServiceProvider).runSyncSafe();
     } catch (syncErr) {

@@ -135,6 +135,7 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
 
   /// Background HTTP sync — fetches latest data from server, updates SQLite, then refreshes UI
   void _syncInBackground() async {
+    if (kIsWeb) return;
     try {
       final session = await ref.read(authRepositoryProvider).getSession();
       if (session == null) return;

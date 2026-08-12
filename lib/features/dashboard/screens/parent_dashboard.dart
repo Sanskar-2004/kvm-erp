@@ -180,6 +180,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
 
   /// Background sync to refresh children list silently
   void _syncChildrenInBackground(dynamic session) async {
+    if (kIsWeb) return;
     try {
       final response = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
