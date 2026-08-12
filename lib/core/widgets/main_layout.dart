@@ -185,13 +185,18 @@ class _MainLayoutState extends ConsumerState<MainLayout> {
 
     return Scaffold(
       appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        shape: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.15), width: 1)),
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             // App name
             const Text(
               'KVM ERP',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.black87),
             ),
             const SizedBox(width: 6),
             // Role badge
