@@ -9,17 +9,21 @@ import '../../features/students/repositories/student_repository.dart';
 import '../../features/auth/repositories/auth_repository.dart';
 import '../../core/constants/app_constants.dart';
 
+import 'package:flutter/foundation.dart';
+
 enum SyncStatus { pending, synced, failed }
 int toDb(SyncStatus s) => s.index;
 SyncStatus fromDb(int v) => SyncStatus.values[v];
 
 final pendingCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  if (kIsWeb) return 0;
   final db = await ref.watch(syncServiceProvider)._dbService.database;
   final counts = await db.query('sync_queue', where: 'synced = ?', whereArgs: [toDb(SyncStatus.pending)]);
   return counts.length;
 });
 
 final failedCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  if (kIsWeb) return 0;
   final db = await ref.watch(syncServiceProvider)._dbService.database;
   final counts = await db.query('sync_queue', where: 'synced = ?', whereArgs: [toDb(SyncStatus.failed)]);
   return counts.length;
@@ -42,13 +46,12 @@ class SyncService {
   SyncService(this._dbService, this._studentRepository, this._authRepository);
 
   Future<void> runSyncSafe() async {
-    if (_isSyncRunning) return;
+    if (kIsWeb || _isSyncRunning) return;
     _isSyncRunning = true;
     try {
       await runSync();
     } catch(e) {
       log('Sync Frame Crashed: $e');
-      rethrow;
     } finally {
       _isSyncRunning = false;
     }

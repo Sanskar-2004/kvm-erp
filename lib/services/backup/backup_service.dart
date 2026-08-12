@@ -4,6 +4,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../db/sqlite_service.dart';
 
+import 'package:flutter/foundation.dart';
+
 final backupServiceProvider = Provider<BackupService>((ref) {
   return BackupService(SQLiteService());
 });
@@ -16,6 +18,7 @@ class BackupService {
   /// Exports the entire SQLite dataset organically into a standard JSON string payload.
   /// Saves it physically into the device's Documents Directory as a Rescue file.
   Future<String> exportDatabase() async {
+     if (kIsWeb) return '';
      final db = await _dbService.database;
 
      final students = await db.query('students');

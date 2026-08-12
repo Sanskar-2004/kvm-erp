@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../services/db/sqlite_service.dart';
 
@@ -8,6 +9,7 @@ class DashboardService {
 
   /// Retrieves the attendance percentage for the current day across the school.
   Future<double> getTodayAttendancePercentage() async {
+    if (kIsWeb) return 0.0;
     final now = DateTime.now();
     final todayStr = DateTime(now.year, now.month, now.day).toIso8601String().split('T')[0];
 
@@ -33,6 +35,7 @@ class DashboardService {
 
   /// Retrieves the total number of approved students in the school
   Future<int> getTotalStudents() async {
+    if (kIsWeb) return 0;
     final db = await _db.database;
     final res = await db.rawQuery("SELECT COUNT(id) as count FROM students WHERE is_deleted = 0 AND (status = 'approved' OR status IS NULL)");
     
@@ -42,6 +45,7 @@ class DashboardService {
 
   /// Retrieves the total pending (due) fees from the student_fees table
   Future<double> getPendingFees() async {
+    if (kIsWeb) return 0.0;
     final db = await _db.database;
     final res = await db.rawQuery(
       'SELECT SUM(amount_due - amount_paid) as total_due FROM student_fees WHERE status != ?',
@@ -54,6 +58,7 @@ class DashboardService {
 
   /// Retrieves the count of students with status = 'pending' (awaiting admission approval)
   Future<int> getPendingAdmissions() async {
+    if (kIsWeb) return 0;
     final db = await _db.database;
     final res = await db.rawQuery(
       "SELECT COUNT(id) as count FROM students WHERE status = 'pending' AND is_deleted = 0",

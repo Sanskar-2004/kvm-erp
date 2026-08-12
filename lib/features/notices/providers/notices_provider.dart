@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../models/notice_model.dart';
 import '../../../services/db/sqlite_service.dart';
 
 /// Database-backed notices provider
 final noticesListProvider = FutureProvider.autoDispose<List<NoticeModel>>((ref) async {
+  if (kIsWeb) return [];
   try {
     final db = await SQLiteService().database;
     final rows = await db.query(
