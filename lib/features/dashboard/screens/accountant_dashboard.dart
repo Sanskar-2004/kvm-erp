@@ -7,6 +7,8 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/constants/class_constants.dart';
 import '../../../services/db/sqlite_service.dart';
 import '../../auth/repositories/auth_repository.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../../auth/screens/login_screen.dart';
 import '../../fees/providers/fee_analytics_provider.dart';
 import '../../../core/utils/academic_utils.dart';
 import 'student_fee_detail_screen.dart';
@@ -294,25 +296,74 @@ class _AccountantDashboardState extends ConsumerState<AccountantDashboard>
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Container(
-          margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          decoration: BoxDecoration(
-            color: Colors.grey[100],
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: TabBar(
-            controller: _tabController,
-            indicator: BoxDecoration(
-                color: Colors.teal, borderRadius: BorderRadius.circular(10)),
-            labelColor: Colors.white,
-            unselectedLabelColor: Colors.grey[600],
-            labelStyle:
-                const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-            dividerColor: Colors.transparent,
-            tabs: const [
-              Tab(text: '  Fees Overview  '),
-              Tab(text: '  Students  '),
-              Tab(text: '  Notices  '),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: Row(
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: TabBar(
+                    controller: _tabController,
+                    indicator: BoxDecoration(
+                        color: Colors.teal, borderRadius: BorderRadius.circular(10)),
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey[600],
+                    labelStyle:
+                        const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    dividerColor: Colors.transparent,
+                    tabs: const [
+                      Tab(text: 'Fees Overview'),
+                      Tab(text: 'Students'),
+                      Tab(text: 'Notices'),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red[600],
+                  side: BorderSide(color: Colors.red.shade200),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                icon: const Icon(Icons.logout_rounded, size: 16),
+                label: const Text('Logout', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Confirm Logout'),
+                      content: const Text('Are you sure you want to log out of KVM ERP?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.pop(ctx, true),
+                          child: const Text('Logout', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    await ref.read(authProvider.notifier).logout();
+                    if (context.mounted) {
+                      Navigator.pushAndRemoveUntil(
+                        context,
+                        MaterialPageRoute(builder: (_) => const LoginScreen()),
+                        (route) => false,
+                      );
+                    }
+                  }
+                },
+              ),
             ],
           ),
         ),
