@@ -12,6 +12,9 @@ class SQLiteService {
   // ── Singleton Access ─────────────────────────────────────────────────
 
   Future<Database> get database async {
+    if (kIsWeb) {
+      throw UnsupportedError('SQLite operations are not supported on Web target platform.');
+    }
     if (_database != null) return _database!;
     _database = await _initDB();
     return _database!;
@@ -20,15 +23,6 @@ class SQLiteService {
   // ── Initialize Database ──────────────────────────────────────────────
 
   Future<Database> _initDB() async {
-    if (kIsWeb) {
-      return await openDatabase(
-        AppConstants.dbName,
-        version: AppConstants.dbVersion,
-        onCreate: _createTables,
-        onUpgrade: _onUpgrade,
-      );
-    }
-
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, AppConstants.dbName);
 
@@ -411,7 +405,9 @@ class SQLiteService {
   // ── Generic CRUD Helpers ─────────────────────────────────────────────
 
   Future<int> insert(String table, Map<String, dynamic> data) async {
+    if (kIsWeb) return 0;
     final db = await database;
+    if (db == null) return 0;
     final res = await db.insert(table, data, conflictAlgorithm: ConflictAlgorithm.replace);
     if (table == 'sync_queue') {
        onSyncQueued.add(null);
@@ -426,7 +422,9 @@ class SQLiteService {
     String? orderBy,
     int? limit,
   }) async {
+    if (kIsWeb) return [];
     final db = await database;
+    if (db == null) return [];
     return await db.query(
       table,
       where: where,
@@ -442,7 +440,9 @@ class SQLiteService {
     required String where,
     required List<dynamic> whereArgs,
   }) async {
+    if (kIsWeb) return 0;
     final db = await database;
+    if (db == null) return 0;
     return await db.update(table, data, where: where, whereArgs: whereArgs);
   }
 
@@ -451,20 +451,38 @@ class SQLiteService {
     required String where,
     required List<dynamic> whereArgs,
   }) async {
+    if (kIsWeb) return 0;
     final db = await database;
-    // We enforce soft-deletes conceptually now by updating 'is_deleted'
-    // but leaving real SQL delete for true cleanup routines
+    if (db == null) return 0;
     return await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
   Future<void> transaction(
       Future<void> Function(Transaction txn) action) async {
+    if (kIsWeb) return;
     final db = await database;
+    if (db == null) return;
     await db.transaction(action);
   }
 
   Future<Map<String, dynamic>> getStudentSummary(String studentId, {String? academicYear}) async {
+    if (kIsWeb) {
+      return {
+        'attendance': {'total': 0, 'present': 0, 'percentage': '0.0'},
+        'fees': {'total_due': 0.0, 'total_paid': 0.0},
+        'marks': [],
+        'alerts': [],
+      };
+    }
     final db = await database;
+    if (db == null) {
+      return {
+        'attendance': {'total': 0, 'present': 0, 'percentage': '0.0'},
+        'fees': {'total_due': 0.0, 'total_paid': 0.0},
+        'marks': [],
+        'alerts': [],
+      };
+    }
 
     // 1. Attendance
     final attRaw = await db.rawQuery('''
@@ -527,7 +545,9 @@ class SQLiteService {
 
   Future<List<Map<String, dynamic>>> getStudentFeeTransactions(
       String studentId, {String? academicYear}) async {
+    if (kIsWeb) return [];
     final db = await database;
+    if (db == null) return [];
     String query = '''
       SELECT month, amount_paid, amount_due, paid_date, status, academic_year, 'N/A' as payment_method
       FROM student_fees
@@ -543,7 +563,29 @@ class SQLiteService {
   }
 
   Future<Map<String, dynamic>> getFeeAnalytics({String? academicYear}) async {
+    if (kIsWeb) {
+      return {
+        "expected": 0,
+        "collected": 0,
+        "pending": 0,
+        "paid_students": 0,
+        "due_students": 0,
+        "transactions": [],
+        "due_students_list": []
+      };
+    }
     final db = await database;
+    if (db == null) {
+      return {
+        "expected": 0,
+        "collected": 0,
+        "pending": 0,
+        "paid_students": 0,
+        "due_students": 0,
+        "transactions": [],
+        "due_students_list": []
+      };
+    }
 
     try {
       String whereClause = 'is_deleted = 0';
@@ -614,7 +656,7 @@ class SQLiteService {
         "due_students_list": dueStudentsList,
       };
     } catch (e) {
-      print("SQLITE FEE ANALYTICS ERROR: \$e");
+      print("SQLITE FEE ANALYTICS ERROR: $e");
       return {
         "expected": 0,
         "collected": 0,
@@ -630,8 +672,9 @@ class SQLiteService {
   /// Bulk-upsert student_fees rows received from a backend sync pull.
   /// Safely ignores any unknown columns so it won't break on schema mismatches.
   Future<void> upsertStudentFees(List<Map<String, dynamic>> fees) async {
-    if (fees.isEmpty) return;
+    if (kIsWeb || fees.isEmpty) return;
     final db = await database;
+    if (db == null) return;
 
     const knownCols = [
       'id', 'student_id', 'academic_year', 'month',
@@ -677,6 +720,7 @@ class SQLiteService {
   }
 
   Future<void> close() async {
+    if (kIsWeb) return;
     final db = await database;
     await db.close();
     _database = null;

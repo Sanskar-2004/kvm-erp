@@ -3,8 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
-import 'package:sqflite/sqflite.dart';
 import 'dart:async';
 import 'services/sync/sync_service.dart';
 import 'services/db/sqlite_service.dart';
@@ -16,12 +14,11 @@ import 'features/auth/screens/login_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize sqflite FFI for web or desktop platforms
-  if (kIsWeb) {
-    databaseFactory = databaseFactoryFfiWeb;
-  } else if (defaultTargetPlatform == TargetPlatform.windows ||
+  // Initialize sqflite FFI for desktop platforms (Windows, Linux, macOS)
+  if (!kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.windows ||
        defaultTargetPlatform == TargetPlatform.linux ||
-       defaultTargetPlatform == TargetPlatform.macOS) {
+       defaultTargetPlatform == TargetPlatform.macOS)) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }

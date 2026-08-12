@@ -70,10 +70,17 @@ class _StudentDashboardState extends ConsumerState<StudentDashboard> {
         debugPrint("Web student data load error: $e");
       }
       if (mounted) {
+        final displayName = (session.name.isNotEmpty && session.name != 'User') ? session.name : 'Student';
         setState(() {
-          _student = {'id': studentId, 'name': 'Student', 'class_id': '-'};
+          _student = {
+            'id': studentId,
+            'name': displayName,
+            'class_id': 'Active Student',
+            'roll_number': studentId.length > 6 ? studentId.substring(studentId.length - 4) : studentId,
+            'phone': session.contact.isNotEmpty ? session.contact : '-',
+          };
           _summary = {
-            'attendance': {'percentage': '90'},
+            'attendance': {'percentage': '100'},
             'fees': {'total_due': 0, 'total_paid': 0},
             'marks': [],
             'alerts': []
