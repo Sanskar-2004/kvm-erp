@@ -140,10 +140,11 @@ class _ExcelImportScreenState extends ConsumerState<ExcelImportScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ),
+        ) : null,
+        automaticallyImplyLeading: false,
         title: const Text('Import from Excel'),
         actions: [
           IconButton(

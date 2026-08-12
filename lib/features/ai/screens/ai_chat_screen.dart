@@ -44,10 +44,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ),
+        ) : null,
+        automaticallyImplyLeading: false,
         title: const Text('AI Assistant'),
         actions: [
           IconButton(

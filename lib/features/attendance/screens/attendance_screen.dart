@@ -168,10 +168,11 @@ class _AttendanceScreenState extends ConsumerState<AttendanceScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ),
+        ) : null,
+        automaticallyImplyLeading: false,
         title: const Text('Mark Attendance'),
       ),
       floatingActionButton: _isSaving

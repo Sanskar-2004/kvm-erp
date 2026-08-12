@@ -124,10 +124,11 @@ class _StudentsScreenState extends ConsumerState<StudentsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ),
+        ) : null,
+        automaticallyImplyLeading: false,
         title: Text(_userRole == 'teacher' ? 'My Students' : 'All Students'),
         actions: [
           if (_userRole == 'admin')

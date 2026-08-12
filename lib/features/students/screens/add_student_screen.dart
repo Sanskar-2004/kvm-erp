@@ -373,10 +373,11 @@ class _AddStudentScreenState extends ConsumerState<AddStudentScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
+        leading: Navigator.canPop(context) ? IconButton(
           icon: const Icon(Icons.arrow_back_rounded),
           onPressed: () => Navigator.maybePop(context),
-        ),
+        ) : null,
+        automaticallyImplyLeading: false,
         title: Text(widget.isEditing ? 'Edit Student' : 'Add New Student'),
         actions: [
           if (_isSaving)

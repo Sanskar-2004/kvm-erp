@@ -95,10 +95,11 @@ class _StudentDetailState extends ConsumerState<StudentDetailScreen> {
       length: 4,
       child: Scaffold(
         appBar: AppBar(
-          leading: IconButton(
+          leading: Navigator.canPop(context) ? IconButton(
             icon: const Icon(Icons.arrow_back_rounded),
             onPressed: () => Navigator.maybePop(context),
-          ),
+          ) : null,
+          automaticallyImplyLeading: false,
           title: Text(s.name),
           actions: [
             if (_userRole == 'admin') ...[
