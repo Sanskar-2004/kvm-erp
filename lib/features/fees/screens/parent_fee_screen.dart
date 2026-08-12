@@ -43,7 +43,7 @@ class _ParentFeeScreenState extends ConsumerState<ParentFeeScreen> {
       final childResp = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
         headers: {'Authorization': 'Bearer ${session.token}'},
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 25));
 
       List<Map<String, dynamic>> children = [];
       if (childResp.statusCode == 200) {

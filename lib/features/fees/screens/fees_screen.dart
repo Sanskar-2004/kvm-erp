@@ -43,7 +43,7 @@ class _FeesScreenState extends ConsumerState<FeesScreen> {
           final response = await http.get(
             Uri.parse('$BASE_URL/sync/pull?lastSync=2000-01-01T00:00:00.000Z'),
             headers: {'Authorization': 'Bearer ${session.token}'},
-          ).timeout(const Duration(seconds: 8));
+          ).timeout(const Duration(seconds: 25));
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);

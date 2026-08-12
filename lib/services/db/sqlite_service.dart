@@ -12,9 +12,6 @@ class SQLiteService {
   // ── Singleton Access ─────────────────────────────────────────────────
 
   Future<Database> get database async {
-    if (kIsWeb) {
-      throw UnsupportedError('SQLite operations are not supported on Web target platform.');
-    }
     if (_database != null) return _database!;
     _database = await _initDB();
     return _database!;
@@ -23,6 +20,15 @@ class SQLiteService {
   // ── Initialize Database ──────────────────────────────────────────────
 
   Future<Database> _initDB() async {
+    if (kIsWeb) {
+      return await openDatabase(
+        AppConstants.dbName,
+        version: AppConstants.dbVersion,
+        onCreate: _createTables,
+        onUpgrade: _onUpgrade,
+      );
+    }
+
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, AppConstants.dbName);
 

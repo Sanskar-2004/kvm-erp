@@ -48,7 +48,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         final childResp = await http.get(
           Uri.parse('$BASE_URL/parent/children/${session.userId}'),
           headers: {'Authorization': 'Bearer ${session.token}'},
-        ).timeout(const Duration(seconds: 8));
+        ).timeout(const Duration(seconds: 25));
 
         if (childResp.statusCode == 200) {
           final data = jsonDecode(childResp.body);
@@ -121,7 +121,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
         final response = await http.get(
           Uri.parse('$BASE_URL/parent/children/${session.userId}'),
           headers: {'Authorization': 'Bearer ${session.token}'},
-        ).timeout(const Duration(seconds: 8));
+        ).timeout(const Duration(seconds: 25));
 
         if (response.statusCode == 200) {
           final data = jsonDecode(response.body);
@@ -184,7 +184,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
       final response = await http.get(
         Uri.parse('$BASE_URL/parent/children/${session.userId}'),
         headers: {'Authorization': 'Bearer ${session.token}'},
-      ).timeout(const Duration(seconds: 8));
+      ).timeout(const Duration(seconds: 25));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -206,7 +206,7 @@ class _ParentDashboardState extends ConsumerState<ParentDashboard> {
           final response = await http.get(
             Uri.parse('$BASE_URL/students/$studentId'),
             headers: {'Authorization': 'Bearer ${session.token}'},
-          ).timeout(const Duration(seconds: 8));
+          ).timeout(const Duration(seconds: 25));
 
           if (response.statusCode == 200) {
             final data = jsonDecode(response.body);
